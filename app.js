@@ -8,7 +8,7 @@ import {
 } from './auth.js';
 import { subscribeToRecipes, saveRecipe, deleteRecipe } from './recipes.js';
 
-var APP_VERSION = 'v1.0.2';
+var APP_VERSION = 'v1.1.0';
 var E = window.AppEngine;
 var DATA = window.APP_DATA || {};
 
@@ -72,6 +72,38 @@ function attachMic(input, btn) {
 }
 attachMic(E.$('#field-title'), E.$('#field-title-mic'));
 attachMic(E.$('#field-category'), E.$('#field-category-mic'));
+attachMic(E.$('#field-note'), E.$('#field-note-mic'));
+
+/* ------------------------------------------------------- Notation (etoiles) */
+function setRating(containerEl, val) {
+  containerEl.dataset.value = val;
+  Array.prototype.forEach.call(containerEl.querySelectorAll('.rating-btn'), function (btn) {
+    btn.classList.toggle('rating-btn--on', Number(btn.dataset.val) <= val);
+  });
+}
+function getRating(containerEl) { return Number(containerEl.dataset.value || 0); }
+function wireRating(containerEl) {
+  containerEl.addEventListener('click', function (e) {
+    var btn = e.target.closest('.rating-btn');
+    if (!btn) return;
+    var val = Number(btn.dataset.val);
+    setRating(containerEl, getRating(containerEl) === val ? 0 : val);
+  });
+}
+wireRating(E.$('#field-difficulty'));
+wireRating(E.$('#field-budget'));
+
+/* ------------------------------------------------------------- Regime */
+function setDiets(containerEl, values) {
+  Array.prototype.forEach.call(containerEl.querySelectorAll('input[type="checkbox"]'), function (cb) {
+    cb.checked = values.indexOf(cb.value) !== -1;
+  });
+}
+function getDiets(containerEl) {
+  return Array.prototype.filter.call(containerEl.querySelectorAll('input[type="checkbox"]'), function (cb) {
+    return cb.checked;
+  }).map(function (cb) { return cb.value; });
+}
 
 function addDynamicRow(containerEl, placeholder, value) {
   var row = document.createElement('div');
@@ -148,11 +180,23 @@ E.$('#add-step-btn').addEventListener('click', function () {
   });
 })();
 
+var SEASON_LABELS = { printemps: 'Printemps', ete: 'Été', automne: 'Automne', hiver: 'Hiver' };
+var DIET_LABELS = {
+  'sans-gluten': 'Sans gluten', 'sans-lactose': 'Sans lactose',
+  'vegetarien': 'Végétarien', 'vegan': 'Végan',
+};
+
 function chipsFor(recipe) {
   var chips = [];
   if (recipe.category) chips.push(recipe.category);
-  if (recipe.timeMinutes) chips.push(recipe.timeMinutes + ' min');
+  var totalMin = (recipe.prepMinutes || 0) + (recipe.cookMinutes || 0);
+  if (totalMin) chips.push(totalMin + ' min');
   if (recipe.servings) chips.push(recipe.servings + ' pers.');
+  if (recipe.difficulty) chips.push('★'.repeat(recipe.difficulty));
+  if (recipe.budget) chips.push('€'.repeat(recipe.budget));
+  if (recipe.season) chips.push(SEASON_LABELS[recipe.season] || recipe.season);
+  (recipe.diets || []).forEach(function (d) { chips.push(DIET_LABELS[d] || d); });
+  if (recipe.conservationDays) chips.push('Se conserve ' + recipe.conservationDays + ' j');
   return chips;
 }
 
@@ -299,6 +343,14 @@ function openDetail(recipe) {
   fillList(E.$('#detail-ingredients'), recipe.ingredients);
   fillList(E.$('#detail-steps'), recipe.steps);
 
+  var noteBlock = E.$('#detail-note-block');
+  if (recipe.note) {
+    E.$('#detail-note').textContent = recipe.note;
+    noteBlock.hidden = false;
+  } else {
+    noteBlock.hidden = true;
+  }
+
   E.screens.show('screen-detail', { push: true });
 }
 
@@ -330,8 +382,15 @@ function openForm(recipe, returnScreen) {
   E.$('#form-title').textContent = editingRecipe ? 'Modifier la recette' : 'Nouvelle recette';
   E.$('#field-title').value = editingRecipe ? editingRecipe.title : '';
   E.$('#field-category').value = editingRecipe ? (editingRecipe.category || '') : '';
-  E.$('#field-time').value = (editingRecipe && editingRecipe.timeMinutes) ? editingRecipe.timeMinutes : '';
+  E.$('#field-prep-time').value = (editingRecipe && editingRecipe.prepMinutes) ? editingRecipe.prepMinutes : '';
+  E.$('#field-cook-time').value = (editingRecipe && editingRecipe.cookMinutes) ? editingRecipe.cookMinutes : '';
   E.$('#field-servings').value = (editingRecipe && editingRecipe.servings) ? editingRecipe.servings : '';
+  setRating(E.$('#field-difficulty'), editingRecipe ? (editingRecipe.difficulty || 0) : 0);
+  setRating(E.$('#field-budget'), editingRecipe ? (editingRecipe.budget || 0) : 0);
+  E.$('#field-season').value = editingRecipe ? (editingRecipe.season || '') : '';
+  E.$('#field-conservation').value = (editingRecipe && editingRecipe.conservationDays) ? editingRecipe.conservationDays : '';
+  setDiets(E.$('#field-diets'), editingRecipe ? (editingRecipe.diets || []) : []);
+  E.$('#field-note').value = editingRecipe ? (editingRecipe.note || '') : '';
   E.$('#field-photo').value = '';
 
   var preview = E.$('#photo-preview');
@@ -379,8 +438,15 @@ E.$('#recipe-form').addEventListener('submit', function (e) {
   var fields = {
     title: title,
     category: E.$('#field-category').value.trim(),
-    timeMinutes: Number(E.$('#field-time').value) || 0,
+    prepMinutes: Number(E.$('#field-prep-time').value) || 0,
+    cookMinutes: Number(E.$('#field-cook-time').value) || 0,
     servings: Number(E.$('#field-servings').value) || 0,
+    difficulty: getRating(E.$('#field-difficulty')),
+    budget: getRating(E.$('#field-budget')),
+    season: E.$('#field-season').value,
+    conservationDays: Number(E.$('#field-conservation').value) || 0,
+    diets: getDiets(E.$('#field-diets')),
+    note: E.$('#field-note').value.trim(),
     ingredients: ingredients,
     steps: steps,
     photoUrl: editingRecipe ? editingRecipe.photoUrl : null,

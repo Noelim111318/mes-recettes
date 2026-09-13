@@ -41,7 +41,14 @@ appels Firebase échouent.
 
 ```
 {
-  ownerId, title, category, timeMinutes, servings,
+  ownerId, title, category,
+  prepMinutes, cookMinutes, servings,
+  difficulty,        // 0-5 (0 = non renseigne)
+  budget,             // 0-5 (0 = non renseigne)
+  season,             // '' | printemps | ete | automne | hiver
+  diets: string[],    // sous-ensemble de sans-gluten / sans-lactose / vegetarien / vegan
+  conservationDays,   // 0 = non renseigne
+  note,                // anecdote / origine / astuce, en vue d'un futur livre de recettes
   ingredients: string[], steps: string[],
   photoUrl, photoPath,
   sharedWith: [],   // toujours vide pour l'instant — réservé à un futur partage
