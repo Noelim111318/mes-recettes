@@ -18,7 +18,7 @@ import {
 // afficher/masquer le bouton cote interface.
 var ADMIN_UID = 'EwBMsqx4MGXHNHcPlkpb7StazJp2';
 
-var APP_VERSION = 'v1.7.3';
+var APP_VERSION = 'v1.7.4';
 var E = window.AppEngine;
 var DATA = window.APP_DATA || {};
 

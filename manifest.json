@@ -3,7 +3,7 @@
   "name": "Mes Recettes",
   "short_name": "Mes Recettes",
   "description": "Mes Recettes — PWA installable, fonctionne hors-ligne.",
-  "version": "v1.7.3",
+  "version": "v1.7.4",
   "lang": "fr",
   "dir": "ltr",
   "start_url": "./index.html",
