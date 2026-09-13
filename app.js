@@ -17,7 +17,7 @@ import {
 // afficher/masquer le bouton cote interface.
 var ADMIN_UID = 'EwBMsqx4MGXHNHcPlkpb7StazJp2';
 
-var APP_VERSION = 'v1.6.0';
+var APP_VERSION = 'v1.7.0';
 var E = window.AppEngine;
 var DATA = window.APP_DATA || {};
 
@@ -285,9 +285,18 @@ var DIET_LABELS = {
   'vegetarien': 'Végétarien', 'vegan': 'Végan',
 };
 
+// Favori propre a chaque personne (proprietaire ou destinataire d'un
+// partage) : `favoritedBy` liste les uid concernes. Repli sur l'ancien
+// booleen `favorite` (proprietaire uniquement) pour les recettes ecrites
+// avant ce champ, jamais migre en base.
+function isFavoritedByMe(recipe) {
+  if (recipe.favoritedBy) return recipe.favoritedBy.indexOf(currentUser) !== -1;
+  return !!recipe.favorite && recipe.ownerId === currentUser;
+}
+
 function chipsFor(recipe) {
   var chips = [];
-  if (recipe.favorite) chips.push('★ Favori');
+  if (isFavoritedByMe(recipe)) chips.push('★ Favori');
   if (recipe.category) chips.push(recipe.category);
   var totalMin = (recipe.prepMinutes || 0) + (recipe.cookMinutes || 0);
   if (totalMin) chips.push(totalMin + ' min');
@@ -374,21 +383,31 @@ function foldAccents(s) {
   return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
-function filterRecipes(list, searchEl, categoryEl, favoritesEl) {
+function filterRecipes(list, searchEl, categoryEl, favoritesEl, sharedEl) {
   var search = foldAccents((searchEl.value || '').trim().toLowerCase());
   var category = categoryEl.value;
   var categoryLower = category.toLowerCase();
   var favoritesOnly = !!(favoritesEl && favoritesEl.checked);
+  var sharedOnly = !!(sharedEl && sharedEl.checked);
   return list.filter(function (r) {
     var matchSearch = !search || foldAccents((r.title || '').toLowerCase()).indexOf(search) !== -1;
     var matchCat = !category || (r.category || '').toLowerCase() === categoryLower;
-    var matchFav = !favoritesOnly || !!r.favorite;
-    return matchSearch && matchCat && matchFav;
+    var matchFav = !favoritesOnly || isFavoritedByMe(r);
+    var matchShared = !sharedOnly || !!r.__shared;
+    return matchSearch && matchCat && matchFav && matchShared;
   });
 }
 
+// Mes recettes + celles partagees avec moi, fondues dans une seule liste
+// (plus d'ecran separe) : chaque entree partagee porte `__shared` (marque au
+// moment de la reception du snapshot, voir startSharedSubscription), utilise
+// pour l'afficher avec l'e-mail de la proprietaire et pour le filtre dedie.
+function combinedRecipes() {
+  return recipes.concat(sharedRecipes);
+}
+
 function updateCategoryOptions() {
-  buildCategoryOptions(E.$('#category-filter'), recipes);
+  buildCategoryOptions(E.$('#category-filter'), combinedRecipes());
 }
 
 function renderRecipeCard(recipe, returnScreen, showOwner) {
@@ -433,14 +452,15 @@ function renderRecipeCard(recipe, returnScreen, showOwner) {
 function renderList() {
   var list = E.$('#recipe-list');
   var empty = E.$('#empty-state');
-  var filtered = filterRecipes(recipes, E.$('#search-input'), E.$('#category-filter'), E.$('#favorites-filter'));
+  var all = combinedRecipes();
+  var filtered = filterRecipes(all, E.$('#search-input'), E.$('#category-filter'), E.$('#favorites-filter'), E.$('#shared-filter'));
 
   list.textContent = '';
-  filtered.forEach(function (r) { list.appendChild(renderRecipeCard(r, 'screen-home', false)); });
+  filtered.forEach(function (r) { list.appendChild(renderRecipeCard(r, 'screen-home', !!r.__shared)); });
 
   if (filtered.length === 0) {
     empty.hidden = false;
-    empty.textContent = recipes.length === 0
+    empty.textContent = all.length === 0
       ? 'Aucune recette pour l’instant — ajoute la première !'
       : 'Aucune recette ne correspond à ta recherche.';
   } else {
@@ -453,8 +473,25 @@ function renderList() {
 E.$('#search-input').addEventListener('input', renderList);
 E.$('#category-filter').addEventListener('change', renderList);
 E.$('#favorites-filter').addEventListener('change', renderList);
+E.$('#shared-filter').addEventListener('change', renderList);
 E.$('#new-recipe-btn').addEventListener('click', function () { openForm(null, 'screen-home'); });
 E.$('#logout-btn').addEventListener('click', function () { logOut(); });
+
+/* -------------------------------------------------------------- Menu (⋮) */
+(function wireMenu() {
+  var toggleBtn = E.$('#menu-toggle-btn');
+  var dropdown = E.$('#menu-dropdown');
+  function close() { dropdown.hidden = true; toggleBtn.setAttribute('aria-expanded', 'false'); }
+  toggleBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    var opening = dropdown.hidden;
+    dropdown.hidden = !opening;
+    toggleBtn.setAttribute('aria-expanded', String(opening));
+  });
+  dropdown.addEventListener('click', function (e) { if (e.target.closest('button')) close(); });
+  document.addEventListener('click', function (e) { if (!dropdown.hidden && !e.target.closest('.menu-wrap')) close(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+})();
 
 /* ---------------------------------------------------------------- Detail */
 function openDetail(recipe, returnScreen) {
@@ -465,11 +502,18 @@ function openDetail(recipe, returnScreen) {
   // Firestore refuseraient de toute facon l'ecriture, mais autant ne pas
   // proposer un bouton qui echouerait).
   var isMine = recipe.ownerId === currentUser;
+  var isShared = !isMine && (recipe.sharedWith || []).indexOf(currentUser) !== -1;
   E.$('#detail-owner-actions').hidden = !isMine;
   E.$('#detail-share-block').hidden = !isMine;
+  E.$('#detail-shared-actions').hidden = !isShared;
   if (isMine) renderShareList(recipe);
 
-  setFavoriteBtn(!!recipe.favorite);
+  // Favori en libre-service pour la proprietaire et les destinataires d'un
+  // partage (regles Firestore) ; en lecture pure (admin sur une recette qui
+  // n'est ni sienne ni partagee avec elle), le bouton n'a pas d'action
+  // possible, autant le masquer plutot que de proposer un clic qui echoue.
+  E.$('#detail-favorite-btn').hidden = !(isMine || isShared);
+  setFavoriteBtn(isFavoritedByMe(recipe));
 
   var photosWrap = E.$('#detail-photos');
   var photos = recipePhotos(recipe);
@@ -519,14 +563,19 @@ function setFavoriteBtn(isFav) {
   btn.textContent = isFav ? '★' : '☆';
   btn.setAttribute('aria-pressed', String(isFav));
 }
+function setFavoritedByMeLocally(recipe, value) {
+  var arr = (recipe.favoritedBy || []).filter(function (u) { return u !== currentUser; });
+  if (value) arr.push(currentUser);
+  recipe.favoritedBy = arr;
+}
 E.$('#detail-favorite-btn').addEventListener('click', function () {
   if (!viewingRecipe) return;
-  var next = !viewingRecipe.favorite;
+  var next = !isFavoritedByMe(viewingRecipe);
   setFavoriteBtn(next); // optimiste : pas d'attente reseau pour un simple toggle
-  viewingRecipe.favorite = next;
-  toggleFavorite(viewingRecipe.id, next).catch(function (err) {
+  setFavoritedByMeLocally(viewingRecipe, next);
+  toggleFavorite(viewingRecipe.id, currentUser, next).catch(function (err) {
     setFavoriteBtn(!next);
-    viewingRecipe.favorite = !next;
+    setFavoritedByMeLocally(viewingRecipe, !next);
     E.announce('Favori non enregistré : ' + (err && err.message ? err.message : 'erreur.'), true);
   });
 });
@@ -621,6 +670,21 @@ E.$('#detail-delete-btn').addEventListener('click', function () {
     })
     .catch(function (err) {
       E.announce('Suppression impossible : ' + (err && err.message ? err.message : 'erreur.'), true);
+    });
+});
+
+E.$('#detail-leave-shared-btn').addEventListener('click', function () {
+  if (!viewingRecipe) return;
+  if (!window.confirm('Retirer « ' + viewingRecipe.title + ' » de tes recettes partagées ?')) return;
+  unshareRecipeWith(viewingRecipe.id, currentUser)
+    .then(function () {
+      sharedRecipes = sharedRecipes.filter(function (r) { return r.id !== viewingRecipe.id; });
+      renderList();
+      E.announce('Recette retirée de tes recettes partagées.');
+      E.screens.show(detailReturnScreen, { push: true });
+    })
+    .catch(function (err) {
+      E.announce('Impossible de retirer : ' + (err && err.message ? err.message : 'erreur.'), true);
     });
 });
 
@@ -879,43 +943,28 @@ E.$('#admin-back-btn').addEventListener('click', function () {
 });
 
 /* ------------------------------------------------------ Partage avec moi */
-function renderSharedList() {
-  var wrap = E.$('#shared-recipe-list');
-  var empty = E.$('#shared-empty-state');
-  var filtered = filterRecipes(sharedRecipes, E.$('#shared-search-input'), E.$('#shared-category-filter'));
-
-  wrap.textContent = '';
-  filtered.forEach(function (r) { wrap.appendChild(renderRecipeCard(r, 'screen-shared', true)); });
-
-  if (filtered.length === 0) {
-    empty.hidden = false;
-    empty.textContent = sharedRecipes.length === 0
-      ? "Personne n'a encore partagé de recette avec toi."
-      : 'Aucune recette ne correspond à ta recherche.';
-  } else {
-    empty.hidden = true;
+// Fondu dans la liste principale (renderList/combinedRecipes) : plus
+// d'ecran ni d'abonnement a la demande, l'abonnement tourne en continu des
+// la connexion (voir startSharedSubscription, appele par watchAuth) comme
+// celui des recettes perso.
+function startSharedSubscription(uid) {
+  stopSharedSubscription();
+  try {
+    unsubscribeShared = subscribeToSharedWithMe(uid, function (list) {
+      sharedRecipes = list.map(function (r) { r.__shared = true; return r; });
+      updateCategoryOptions();
+      renderList();
+    }, function (err) {
+      recoverFromPersistenceError(err);
+    });
+  } catch (err) {
+    recoverFromPersistenceError(err);
   }
 }
-
-E.$('#shared-search-input').addEventListener('input', renderSharedList);
-E.$('#shared-category-filter').addEventListener('change', renderSharedList);
-
-E.$('#shared-btn').addEventListener('click', function () {
-  E.$('#shared-search-input').value = '';
-  unsubscribeShared = subscribeToSharedWithMe(currentUser, function (list) {
-    sharedRecipes = list;
-    buildCategoryOptions(E.$('#shared-category-filter'), sharedRecipes);
-    renderSharedList();
-  }, function (err) {
-    showVisibleError('Erreur de synchronisation (partagé)', err);
-  });
-  E.screens.show('screen-shared', { push: true });
-});
-E.$('#shared-back-btn').addEventListener('click', function () {
+function stopSharedSubscription() {
   if (unsubscribeShared) { unsubscribeShared(); unsubscribeShared = null; }
   sharedRecipes = [];
-  E.screens.show('screen-home', { push: true });
-});
+}
 
 /* --------------------------------------------------------------- Export */
 E.$('#export-json-btn').addEventListener('click', function () {
@@ -924,7 +973,7 @@ E.$('#export-json-btn').addEventListener('click', function () {
       title: r.title, category: r.category, prepMinutes: r.prepMinutes, cookMinutes: r.cookMinutes,
       servings: r.servings, difficulty: r.difficulty, budget: r.budget, season: r.season,
       diets: r.diets, conservationDays: r.conservationDays, note: r.note,
-      ingredients: r.ingredients, steps: r.steps, favorite: !!r.favorite,
+      ingredients: r.ingredients, steps: r.steps, favorite: isFavoritedByMe(r),
       photos: recipePhotos(r).map(function (p) { return p.url; }),
     };
   });
@@ -1066,14 +1115,14 @@ watchAuth(function (user) {
     // ne doit jamais bloquer la transition post-connexion.
     E.screens.show('screen-home', { push: false });
     startRecipesSubscription(currentUser);
+    startSharedSubscription(currentUser);
   } else {
     currentUser = null;
     currentUserEmail = '';
     stopRecipesSubscription();
+    stopSharedSubscription();
     if (unsubscribeAllRecipes) { unsubscribeAllRecipes(); unsubscribeAllRecipes = null; }
-    if (unsubscribeShared) { unsubscribeShared(); unsubscribeShared = null; }
     allRecipes = [];
-    sharedRecipes = [];
     E.$('#auth-form').reset();
     setAuthMode('signin');
     E.screens.show('screen-auth', { push: false });

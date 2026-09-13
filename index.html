@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Mes Recettes</title>
   <meta name="description" content="Mes Recettes — PWA installable, fonctionne hors-ligne.">
-  <meta name="app-version" content="v1.6.0">
+  <meta name="app-version" content="v1.7.0">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#2B1B12">
   <meta name="mobile-web-app-capable" content="yes">
@@ -24,7 +24,7 @@
 <a class="skip-link" href="#main">Aller au contenu</a>
 
 <main class="container" id="main">
-  <div class="version-badge" id="app-version">v1.6.0</div>
+  <div class="version-badge" id="app-version">v1.7.0</div>
 
   <div class="install-row" id="install-row" hidden>
     <button class="install-btn" id="install-btn" type="button" aria-label="Installer l'application">📲 Installer l'appli</button>
@@ -66,9 +66,15 @@
       <div class="topbar-row">
         <h1>Mes recettes</h1>
         <div class="topbar-actions">
-          <button class="btn btn--ghost" type="button" id="admin-btn" hidden>Admin</button>
-          <button class="btn btn--ghost" type="button" id="shared-btn">Partagé</button>
-          <button class="btn btn--ghost" type="button" id="logout-btn">Déconnexion</button>
+          <div class="menu-wrap">
+            <button class="btn btn--ghost menu-toggle-btn" type="button" id="menu-toggle-btn" aria-haspopup="true" aria-expanded="false" aria-label="Menu">⋮</button>
+            <div class="menu-dropdown" id="menu-dropdown" hidden>
+              <button class="menu-item" type="button" id="admin-btn" hidden>Admin</button>
+              <button class="menu-item" type="button" id="export-json-btn">Exporter</button>
+              <button class="menu-item" type="button" id="export-book-btn">Tout imprimer</button>
+              <button class="menu-item" type="button" id="logout-btn">Déconnexion</button>
+            </div>
+          </div>
         </div>
       </div>
       <p class="offline-badge" id="offline-badge" role="status" hidden>📡 Hors-ligne — tes modifs seront synchronisées au retour du réseau.</p>
@@ -80,8 +86,7 @@
       </div>
       <div class="filter-row">
         <label class="checkbox-chip"><input type="checkbox" id="favorites-filter"> ★ Favoris</label>
-        <button class="btn btn--ghost" type="button" id="export-json-btn">Exporter (JSON)</button>
-        <button class="btn btn--ghost" type="button" id="export-book-btn">Exporter pour impression</button>
+        <label class="checkbox-chip"><input type="checkbox" id="shared-filter"> 🔗 Partagées avec moi</label>
       </div>
       <button class="btn btn--primary" type="button" id="new-recipe-btn">+ Nouvelle recette</button>
     </div>
@@ -248,6 +253,9 @@
         <button class="btn btn--ghost" type="button" id="detail-delete-btn">Supprimer</button>
         <button class="btn btn--primary" type="button" id="detail-edit-btn">Modifier</button>
       </div>
+      <div class="form-actions" id="detail-shared-actions" hidden>
+        <button class="btn btn--ghost" type="button" id="detail-leave-shared-btn">Retirer de mes recettes partagées</button>
+      </div>
     </div>
   </div>
 
@@ -268,24 +276,6 @@
     </div>
     <div class="recipe-list" id="admin-recipe-list"></div>
     <p class="empty-state" id="admin-empty-state" hidden></p>
-  </div>
-
-  <!-- ECRAN 6 : recettes partagees avec moi -->
-  <div class="screen" id="screen-shared">
-    <div class="topbar">
-      <div class="topbar-row">
-        <h1>Partagé avec moi</h1>
-        <button class="btn btn--ghost" type="button" id="shared-back-btn">← Retour</button>
-      </div>
-      <div class="search-row">
-        <input class="form-input" type="search" id="shared-search-input" placeholder="Rechercher…" aria-label="Rechercher une recette">
-        <select class="form-input filter-select" id="shared-category-filter" aria-label="Filtrer par catégorie">
-          <option value="">Toutes</option>
-        </select>
-      </div>
-    </div>
-    <div class="recipe-list" id="shared-recipe-list"></div>
-    <p class="empty-state" id="shared-empty-state" hidden></p>
   </div>
 
   <!-- ECRAN 7 : export pour impression (toutes mes recettes, une longue fiche) -->

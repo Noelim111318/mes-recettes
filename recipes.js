@@ -2,9 +2,10 @@
  *
  * Isolation par utilisatrice : chaque recette porte un `ownerId`, la requete
  * liste filtre dessus, et les regles Firestore (firestore.rules) refusent
- * tout acces a un document dont on n'est pas proprietaire. `sharedWith` est
- * ecrit vide a la creation et jamais touche ici : reserve a une future
- * fonctionnalite de partage (pas de migration a prevoir).
+ * tout acces a un document dont on n'est pas proprietaire — sauf lecture
+ * pour l'admin et les comptes listes dans `sharedWith`, qui peuvent en plus
+ * chacun modifier leur propre entree dans `favoritedBy` et se retirer eux-
+ * memes de `sharedWith` (voir firestore.rules).
  */
 import { db, storage } from './firebase-init.js';
 import {
@@ -96,8 +97,13 @@ export function unshareRecipeWith(recipeId, uid) {
   return updateDoc(doc(db, 'recipes', recipeId), { sharedWith: arrayRemove(uid) });
 }
 
-export function toggleFavorite(recipeId, value) {
-  return updateDoc(doc(db, 'recipes', recipeId), { favorite: !!value });
+// Favori par personne (proprietaire ou destinataire d'un partage) : chacune
+// marque/demarque sa propre entree dans `favoritedBy`, jamais un booleen
+// unique qui n'aurait eu de sens que pour la proprietaire.
+export function toggleFavorite(recipeId, uid, value) {
+  return updateDoc(doc(db, 'recipes', recipeId), {
+    favoritedBy: value ? arrayUnion(uid) : arrayRemove(uid),
+  });
 }
 
 // Ancien format (v1.1.0 et avant, ou photos envoyees avant l'ajout des
@@ -195,7 +201,7 @@ export async function saveRecipe(ownerId, recipeId, fields, orderedPhotos, remov
     await updateDoc(doc(db, 'recipes', id), payload);
   } else {
     payload.sharedWith = [];
-    payload.favorite = false;
+    payload.favoritedBy = [];
     payload.createdAt = Date.now();
     const created = await addDoc(RECIPES, payload);
     id = created.id;
