@@ -18,7 +18,7 @@ import {
 // afficher/masquer le bouton cote interface.
 var ADMIN_UID = 'EwBMsqx4MGXHNHcPlkpb7StazJp2';
 
-var APP_VERSION = 'v1.7.1';
+var APP_VERSION = 'v1.7.2';
 var E = window.AppEngine;
 var DATA = window.APP_DATA || {};
 
@@ -297,12 +297,11 @@ function isFavoritedByMe(recipe) {
 
 function chipsFor(recipe) {
   var chips = [];
-  if (isFavoritedByMe(recipe)) chips.push('★ Favori');
   if (recipe.category) chips.push(recipe.category);
   var totalMin = (recipe.prepMinutes || 0) + (recipe.cookMinutes || 0);
   if (totalMin) chips.push(totalMin + ' min');
   if (recipe.servings) chips.push(recipe.servings + ' pers.');
-  if (recipe.difficulty) chips.push('★'.repeat(recipe.difficulty));
+  if (recipe.difficulty) chips.push('▲'.repeat(recipe.difficulty));
   if (recipe.budget) chips.push('€'.repeat(recipe.budget));
   if (recipe.season) chips.push(SEASON_LABELS[recipe.season] || recipe.season);
   (recipe.diets || []).forEach(function (d) { chips.push(DIET_LABELS[d] || d); });

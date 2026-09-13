@@ -323,15 +323,15 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus { outl
 .detail-topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .favorite-btn {
   flex: 0 0 auto;
-  width: 34px; height: 34px;
-  border-radius: 10px;
-  border: 1px solid var(--card-border);
+  border: none;
   background: none;
   color: var(--ink-dim);
   font-size: 1.1rem;
+  font-weight: 700;
+  padding: 6px 8px;
   cursor: pointer;
 }
-.favorite-btn[aria-pressed="true"] { color: var(--yellow); border-color: var(--yellow); }
+.favorite-btn[aria-pressed="true"] { color: var(--yellow); }
 .chip--removable { display: inline-flex; align-items: center; gap: 6px; cursor: default; }
 .chip--removable button {
   border: none; background: none; color: inherit;
