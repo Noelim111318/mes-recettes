@@ -13,7 +13,7 @@ import { subscribeToRecipes, subscribeToAllRecipes, saveRecipe, deleteRecipe, re
 // afficher/masquer le bouton cote interface.
 var ADMIN_UID = 'EwBMsqx4MGXHNHcPlkpb7StazJp2';
 
-var APP_VERSION = 'v1.5.0';
+var APP_VERSION = 'v1.5.1';
 var E = window.AppEngine;
 var DATA = window.APP_DATA || {};
 
@@ -186,6 +186,21 @@ function addDynamicRow(containerEl, placeholder, value) {
   input.placeholder = placeholder;
   input.value = value || '';
 
+  var moveWrap = document.createElement('div');
+  moveWrap.className = 'row-move';
+  var upBtn = document.createElement('button');
+  upBtn.type = 'button';
+  upBtn.className = 'row-move-btn row-move-up';
+  upBtn.setAttribute('aria-label', 'Monter cette ligne');
+  upBtn.textContent = '▲';
+  var downBtn = document.createElement('button');
+  downBtn.type = 'button';
+  downBtn.className = 'row-move-btn row-move-down';
+  downBtn.setAttribute('aria-label', 'Descendre cette ligne');
+  downBtn.textContent = '▼';
+  moveWrap.appendChild(upBtn);
+  moveWrap.appendChild(downBtn);
+
   var micBtn = document.createElement('button');
   micBtn.type = 'button';
   micBtn.className = 'mic-btn';
@@ -200,6 +215,7 @@ function addDynamicRow(containerEl, placeholder, value) {
   removeBtn.textContent = '×';
 
   row.appendChild(input);
+  row.appendChild(moveWrap);
   row.appendChild(micBtn);
   row.appendChild(removeBtn);
   containerEl.appendChild(row);
@@ -221,13 +237,19 @@ function collectDynamicList(containerEl) {
 
 function wireDynamicListRemoval(containerEl) {
   containerEl.addEventListener('click', function (e) {
-    var btn = e.target.closest('.dynamic-list-remove');
-    if (!btn) return;
-    var row = btn.closest('.dynamic-list-row');
-    if (containerEl.children.length > 1) {
-      row.remove();
-    } else {
-      row.querySelector('input').value = '';
+    var row = e.target.closest('.dynamic-list-row');
+    if (!row) return;
+
+    if (e.target.closest('.dynamic-list-remove')) {
+      if (containerEl.children.length > 1) {
+        row.remove();
+      } else {
+        row.querySelector('input').value = '';
+      }
+    } else if (e.target.closest('.row-move-up')) {
+      if (row.previousElementSibling) containerEl.insertBefore(row, row.previousElementSibling);
+    } else if (e.target.closest('.row-move-down')) {
+      if (row.nextElementSibling) containerEl.insertBefore(row.nextElementSibling, row);
     }
   });
 }

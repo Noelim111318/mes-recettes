@@ -152,6 +152,27 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus { outl
 }
 .dynamic-list-remove:hover { color: var(--red); border-color: var(--red); }
 
+.row-move {
+  flex: 0 0 auto;
+  display: flex; flex-direction: column;
+  width: 28px; height: 34px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--card-border);
+}
+.row-move-btn {
+  flex: 1;
+  border: none;
+  background: none;
+  color: var(--ink-dim);
+  font-size: 0.6rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.row-move-btn:not(:last-child) { border-bottom: 1px solid var(--card-border); }
+.row-move-btn:hover { color: var(--yellow); }
+.row-move-btn:active { background: color-mix(in srgb, var(--yellow) 14%, transparent); }
+
 /* --------------------------------------------------------------- Photos */
 .photo-gallery {
   display: flex; flex-wrap: wrap; gap: 10px;
