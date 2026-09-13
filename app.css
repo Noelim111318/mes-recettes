@@ -249,6 +249,30 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus { outl
 }
 #screen-detail h2 { font-size: 1.5rem; color: var(--yellow); margin-bottom: 8px; }
 .form-required-hint { font-size: 0.78rem; color: var(--ink-dim); margin-top: -8px; }
+.detail-topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
+/* ------------------------------------------------------------- Impression */
+/* engine.css passe deja le fond en blanc/texte en noir et masque les ecrans
+   inactifs + le bandeau d'installation ; on complete ici pour la fiche
+   recette : masque les boutons d'action, force des couleurs lisibles sur
+   papier (les teintes ambre/sauge, pensees pour un fond sombre, manquent de
+   contraste sur blanc), et retire les fonds/ombres decoratifs. */
+@media print {
+  .version-badge, .detail-topbar, #screen-detail .form-actions { display: none !important; }
+  .panel { background: none; border: none; box-shadow: none; padding: 0; }
+  #screen-detail h2, .detail-heading, .chip, .detail-note { color: #000 !important; }
+  .chip { background: none !important; border: 1px solid #000; }
+  .detail-list li {
+    background: none !important;
+    border: 1px solid #999 !important;
+    color: #000;
+    break-inside: avoid;
+  }
+  .detail-note { background: none !important; border: 1px solid #999 !important; }
+  .detail-photos { overflow: visible; flex-wrap: wrap; }
+  .detail-photos img { max-height: 8cm; break-inside: avoid; }
+}
+@page { margin: 1.5cm; }
 .detail-heading {
   font-size: 0.85rem; font-weight: 800; color: var(--blue);
   text-transform: uppercase; letter-spacing: 0.5px;

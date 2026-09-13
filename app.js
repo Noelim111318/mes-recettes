@@ -8,7 +8,7 @@ import {
 } from './auth.js';
 import { subscribeToRecipes, saveRecipe, deleteRecipe, recipePhotos } from './recipes.js';
 
-var APP_VERSION = 'v1.2.1';
+var APP_VERSION = 'v1.3.0';
 var E = window.AppEngine;
 var DATA = window.APP_DATA || {};
 
@@ -434,6 +434,9 @@ function openDetail(recipe) {
 
 E.$('#detail-back-btn').addEventListener('click', function () {
   E.screens.show('screen-home', { push: true });
+});
+E.$('#detail-print-btn').addEventListener('click', function () {
+  window.print();
 });
 E.$('#detail-edit-btn').addEventListener('click', function () {
   if (viewingRecipe) openForm(viewingRecipe, 'screen-detail');

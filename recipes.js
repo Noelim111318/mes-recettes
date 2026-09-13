@@ -16,8 +16,12 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js';
 
 const RECIPES = collection(db, 'recipes');
-const MAX_DIM = 1600;
-const JPEG_QUALITY = 0.82;
+// 1600px suffit a l'ecran mais pas a l'impression (a peine ~13 cm de large a
+// 300 dpi). 3000px couvre une pleine page de livre (jusqu'a ~25 cm a 300
+// dpi) tout en restant tres loin des quotas gratuits (5 Go = ~1700 photos a
+// cette taille/qualite).
+const MAX_DIM = 3000;
+const JPEG_QUALITY = 0.9;
 // Miniature dediee (cartes de la liste, galerie du formulaire) : bien plus
 // legere que la photo pleine taille, pour ne pas la telecharger juste pour
 // l'afficher en 88px de cote.
