@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Mes Recettes</title>
   <meta name="description" content="Mes Recettes — PWA installable, fonctionne hors-ligne.">
-  <meta name="app-version" content="v1.3.0">
+  <meta name="app-version" content="v1.3.1">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#2B1B12">
   <meta name="mobile-web-app-capable" content="yes">
@@ -24,7 +24,7 @@
 <a class="skip-link" href="#main">Aller au contenu</a>
 
 <main class="container" id="main">
-  <div class="version-badge" id="app-version">v1.3.0</div>
+  <div class="version-badge" id="app-version">v1.3.1</div>
 
   <div class="install-row" id="install-row" hidden>
     <button class="install-btn" id="install-btn" type="button" aria-label="Installer l'application">📲 Installer l'appli</button>
@@ -70,7 +70,7 @@
       </div>
       <p class="offline-badge" id="offline-badge" role="status" hidden>📡 Hors-ligne — tes modifs seront synchronisées au retour du réseau.</p>
       <div class="search-row">
-        <input class="form-input" type="search" id="search-input" placeholder="Rechercher une recette…" aria-label="Rechercher une recette">
+        <input class="form-input" type="search" id="search-input" placeholder="Rechercher…" aria-label="Rechercher une recette">
         <select class="form-input filter-select" id="category-filter" aria-label="Filtrer par catégorie">
           <option value="">Toutes</option>
         </select>
@@ -210,7 +210,7 @@
     <div class="panel">
       <div class="detail-topbar">
         <button class="btn btn--ghost" type="button" id="detail-back-btn">← Retour</button>
-        <button class="btn btn--ghost" type="button" id="detail-print-btn">🖨️ Imprimer</button>
+        <button class="btn btn--ghost" type="button" id="detail-print-btn">Imprimer</button>
       </div>
       <div class="detail-photos" id="detail-photos" hidden></div>
       <h2 id="detail-title"></h2>

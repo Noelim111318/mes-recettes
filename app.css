@@ -248,7 +248,7 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus { outl
   scroll-snap-align: start;
 }
 #screen-detail h2 { font-size: 1.5rem; color: var(--yellow); margin-bottom: 8px; }
-.form-required-hint { font-size: 0.78rem; color: var(--ink-dim); margin-top: -8px; }
+.form-required-hint { font-size: 0.78rem; color: var(--ink-dim); margin-top: -8px; margin-bottom: 14px; }
 .detail-topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 
 /* ------------------------------------------------------------- Impression */
@@ -258,7 +258,7 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus { outl
    papier (les teintes ambre/sauge, pensees pour un fond sombre, manquent de
    contraste sur blanc), et retire les fonds/ombres decoratifs. */
 @media print {
-  .version-badge, .detail-topbar, #screen-detail .form-actions { display: none !important; }
+  .version-badge, .skip-link, .detail-topbar, #screen-detail .form-actions { display: none !important; }
   .panel { background: none; border: none; box-shadow: none; padding: 0; }
   #screen-detail h2, .detail-heading, .chip, .detail-note { color: #000 !important; }
   .chip { background: none !important; border: 1px solid #000; }

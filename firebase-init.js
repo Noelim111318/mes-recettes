@@ -12,7 +12,7 @@ import { getAuth } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-aut
 import {
   initializeFirestore,
   persistentLocalCache,
-  persistentSingleTabManager,
+  persistentMultiTabManager,
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 import { getStorage } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js';
 import { firebaseConfig } from './firebase-config.js';
@@ -23,9 +23,11 @@ export const auth = getAuth(app);
 
 // Cache local persistant (IndexedDB) : lectures/ecritures disponibles
 // hors-ligne, mises en file et synchronisees automatiquement au retour du
-// reseau. Un seul onglet actif a la fois (suffisant pour un usage perso).
+// reseau. Multi-onglets : l'app peut tourner a la fois installee (PWA) et
+// dans un onglet classique sans que l'un des deux cesse de recevoir les
+// mises a jour en direct (c'etait le cas avec persistentSingleTabManager).
 export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({ tabManager: persistentSingleTabManager({}) }),
+  localCache: persistentLocalCache({ tabManager: persistentMultiTabManager() }),
 });
 
 export const storage = getStorage(app);

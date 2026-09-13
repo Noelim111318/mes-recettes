@@ -29,7 +29,10 @@ const THUMB_DIM = 320;
 const THUMB_QUALITY = 0.6;
 
 export function subscribeToRecipes(ownerId, onChange, onError) {
-  const q = query(RECIPES, where('ownerId', '==', ownerId), orderBy('updatedAt', 'desc'));
+  // Tri alphabetique stable : un ordre par derniere modification changeait a
+  // chaque edition, ce qui rendait la liste imprevisible d'une visite a
+  // l'autre.
+  const q = query(RECIPES, where('ownerId', '==', ownerId), orderBy('title'));
   return onSnapshot(q, (snap) => {
     const list = [];
     snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
