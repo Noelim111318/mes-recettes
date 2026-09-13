@@ -9,13 +9,15 @@
 import { db, storage } from './firebase-init.js';
 import {
   collection, query, where, orderBy, onSnapshot,
-  addDoc, updateDoc, deleteDoc, doc,
+  addDoc, updateDoc, deleteDoc, doc, getDoc, getDocs, setDoc,
+  arrayUnion, arrayRemove, limit,
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 import {
   ref, uploadBytes, getDownloadURL, deleteObject,
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js';
 
 const RECIPES = collection(db, 'recipes');
+const USERS = collection(db, 'users');
 // 1600px suffit a l'ecran mais pas a l'impression (a peine ~13 cm de large a
 // 300 dpi). 3000px couvre une pleine page de livre (jusqu'a ~25 cm a 300
 // dpi) tout en restant tres loin des quotas gratuits (5 Go = ~1700 photos a
@@ -52,6 +54,52 @@ export function subscribeToAllRecipes(onChange, onError) {
   }, onError);
 }
 
+// Recettes qu'une autre utilisatrice a partagees avec moi (lecture seule,
+// comme la vue admin).
+export function subscribeToSharedWithMe(uid, onChange, onError) {
+  const q = query(RECIPES, where('sharedWith', 'array-contains', uid), orderBy('title'));
+  return onSnapshot(q, (snap) => {
+    const list = [];
+    snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+    onChange(list);
+  }, onError);
+}
+
+/* ---------------------------------------------------- Annuaire / partage */
+// A appeler une fois par connexion : garde a jour uid -> e-mail, necessaire
+// pour retrouver l'uid d'une personne a partir de son e-mail (l'Admin SDK
+// qui permettrait de le faire directement n'est pas accessible cote
+// navigateur).
+export function upsertUserProfile(uid, email) {
+  return setDoc(doc(USERS, uid), { email: email || '' }, { merge: true });
+}
+
+// Retrouve l'uid d'une utilisatrice a partir de son e-mail exact (sensible a
+// la casse telle qu'enregistree par Firebase Auth, generalement en
+// minuscules). Renvoie null si personne ne correspond.
+export async function findUserByEmail(email) {
+  const q = query(USERS, where('email', '==', email), limit(1));
+  const snap = await getDocs(q);
+  return snap.empty ? null : snap.docs[0].id;
+}
+
+export async function getUserEmail(uid) {
+  const snap = await getDoc(doc(USERS, uid));
+  return snap.exists() ? (snap.data().email || '') : '';
+}
+
+export function shareRecipeWith(recipeId, uid) {
+  return updateDoc(doc(db, 'recipes', recipeId), { sharedWith: arrayUnion(uid) });
+}
+
+export function unshareRecipeWith(recipeId, uid) {
+  return updateDoc(doc(db, 'recipes', recipeId), { sharedWith: arrayRemove(uid) });
+}
+
+export function toggleFavorite(recipeId, value) {
+  return updateDoc(doc(db, 'recipes', recipeId), { favorite: !!value });
+}
+
 // Ancien format (v1.1.0 et avant, ou photos envoyees avant l'ajout des
 // miniatures) : normalise vers { url, path, thumbUrl, thumbPath }, avec la
 // photo pleine taille en repli si aucune miniature dediee n'existe.
@@ -65,6 +113,10 @@ export function recipePhotos(recipe) {
     path: p.path || null,
     thumbUrl: p.thumbUrl || p.url,
     thumbPath: p.thumbPath || null,
+    // Absent sur les photos envoyees avant ce champ : 0, donc sous-estime
+    // legerement l'espace utilise pour ces anciennes photos (approximation
+    // admin uniquement, pas une valeur facturee).
+    sizeBytes: p.sizeBytes || 0,
   }));
 }
 
@@ -104,7 +156,7 @@ export async function saveRecipe(ownerId, recipeId, fields, orderedPhotos, remov
       await uploadBytes(ref(storage, thumbPath), thumbBlob, { contentType: 'image/jpeg' });
       const url = await getDownloadURL(ref(storage, path));
       const thumbUrl = await getDownloadURL(ref(storage, thumbPath));
-      photos.push({ url, path, thumbUrl, thumbPath });
+      photos.push({ url, path, thumbUrl, thumbPath, sizeBytes: fullBlob.size + thumbBlob.size });
     } catch (err) {
       if (!photoError) photoError = err; // on garde ce qui a deja ete envoye avant l'echec
     }
@@ -143,6 +195,7 @@ export async function saveRecipe(ownerId, recipeId, fields, orderedPhotos, remov
     await updateDoc(doc(db, 'recipes', id), payload);
   } else {
     payload.sharedWith = [];
+    payload.favorite = false;
     payload.createdAt = Date.now();
     const created = await addDoc(RECIPES, payload);
     id = created.id;

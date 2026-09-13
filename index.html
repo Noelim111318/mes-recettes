@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Mes Recettes</title>
   <meta name="description" content="Mes Recettes — PWA installable, fonctionne hors-ligne.">
-  <meta name="app-version" content="v1.5.1">
+  <meta name="app-version" content="v1.6.0">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#2B1B12">
   <meta name="mobile-web-app-capable" content="yes">
@@ -24,7 +24,7 @@
 <a class="skip-link" href="#main">Aller au contenu</a>
 
 <main class="container" id="main">
-  <div class="version-badge" id="app-version">v1.5.1</div>
+  <div class="version-badge" id="app-version">v1.6.0</div>
 
   <div class="install-row" id="install-row" hidden>
     <button class="install-btn" id="install-btn" type="button" aria-label="Installer l'application">📲 Installer l'appli</button>
@@ -67,6 +67,7 @@
         <h1>Mes recettes</h1>
         <div class="topbar-actions">
           <button class="btn btn--ghost" type="button" id="admin-btn" hidden>Admin</button>
+          <button class="btn btn--ghost" type="button" id="shared-btn">Partagé</button>
           <button class="btn btn--ghost" type="button" id="logout-btn">Déconnexion</button>
         </div>
       </div>
@@ -76,6 +77,11 @@
         <select class="form-input filter-select" id="category-filter" aria-label="Filtrer par catégorie">
           <option value="">Toutes</option>
         </select>
+      </div>
+      <div class="filter-row">
+        <label class="checkbox-chip"><input type="checkbox" id="favorites-filter"> ★ Favoris</label>
+        <button class="btn btn--ghost" type="button" id="export-json-btn">Exporter (JSON)</button>
+        <button class="btn btn--ghost" type="button" id="export-book-btn">Exporter pour impression</button>
       </div>
       <button class="btn btn--primary" type="button" id="new-recipe-btn">+ Nouvelle recette</button>
     </div>
@@ -212,7 +218,11 @@
     <div class="panel">
       <div class="detail-topbar">
         <button class="btn btn--ghost" type="button" id="detail-back-btn">← Retour</button>
-        <button class="btn btn--ghost" type="button" id="detail-print-btn">Imprimer</button>
+        <div class="topbar-actions">
+          <button class="favorite-btn" type="button" id="detail-favorite-btn" aria-label="Marquer comme favori" aria-pressed="false">☆</button>
+          <button class="btn btn--ghost" type="button" id="detail-duplicate-btn">Dupliquer</button>
+          <button class="btn btn--ghost" type="button" id="detail-print-btn">Imprimer</button>
+        </div>
       </div>
       <div class="detail-photos" id="detail-photos" hidden></div>
       <h2 id="detail-title"></h2>
@@ -224,6 +234,15 @@
       <div id="detail-note-block" hidden>
         <h3 class="detail-heading">Note personnelle</h3>
         <p class="detail-note" id="detail-note"></p>
+      </div>
+      <div id="detail-share-block" hidden>
+        <h3 class="detail-heading">Partager</h3>
+        <div class="search-row">
+          <input class="form-input" type="email" id="share-email-input" placeholder="E-mail de la personne">
+          <button class="btn btn--ghost" type="button" id="share-add-btn">Partager</button>
+        </div>
+        <p class="form-error" id="share-error" role="alert" hidden></p>
+        <div class="chip-row" id="share-list"></div>
       </div>
       <div class="form-actions" id="detail-owner-actions">
         <button class="btn btn--ghost" type="button" id="detail-delete-btn">Supprimer</button>
@@ -239,6 +258,7 @@
         <h1>Toutes les recettes</h1>
         <button class="btn btn--ghost" type="button" id="admin-back-btn">← Retour</button>
       </div>
+      <p class="admin-usage" id="admin-usage"></p>
       <div class="search-row">
         <input class="form-input" type="search" id="admin-search-input" placeholder="Rechercher…" aria-label="Rechercher une recette">
         <select class="form-input filter-select" id="admin-category-filter" aria-label="Filtrer par catégorie">
@@ -248,6 +268,33 @@
     </div>
     <div class="recipe-list" id="admin-recipe-list"></div>
     <p class="empty-state" id="admin-empty-state" hidden></p>
+  </div>
+
+  <!-- ECRAN 6 : recettes partagees avec moi -->
+  <div class="screen" id="screen-shared">
+    <div class="topbar">
+      <div class="topbar-row">
+        <h1>Partagé avec moi</h1>
+        <button class="btn btn--ghost" type="button" id="shared-back-btn">← Retour</button>
+      </div>
+      <div class="search-row">
+        <input class="form-input" type="search" id="shared-search-input" placeholder="Rechercher…" aria-label="Rechercher une recette">
+        <select class="form-input filter-select" id="shared-category-filter" aria-label="Filtrer par catégorie">
+          <option value="">Toutes</option>
+        </select>
+      </div>
+    </div>
+    <div class="recipe-list" id="shared-recipe-list"></div>
+    <p class="empty-state" id="shared-empty-state" hidden></p>
+  </div>
+
+  <!-- ECRAN 7 : export pour impression (toutes mes recettes, une longue fiche) -->
+  <div class="screen" id="screen-book">
+    <div class="detail-topbar">
+      <button class="btn btn--ghost" type="button" id="book-back-btn">← Retour</button>
+      <button class="btn btn--primary" type="button" id="book-print-btn">Imprimer / PDF</button>
+    </div>
+    <div id="book-content"></div>
   </div>
 </main>
 

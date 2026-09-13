@@ -234,6 +234,8 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus { outl
 .search-row { display: flex; gap: 10px; flex-wrap: wrap; }
 .search-row .form-input { flex: 1 1 160px; }
 .filter-select { flex: 1 1 160px; }
+.filter-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.admin-usage { font-size: 0.8rem; color: var(--ink-dim); text-align: center; }
 
 /* ---------------------------------------------------------- Liste recettes */
 .recipe-list {
@@ -291,6 +293,22 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus { outl
 #screen-detail h2 { font-size: 1.5rem; color: var(--yellow); margin-bottom: 8px; }
 .form-required-hint { font-size: 0.78rem; color: var(--ink-dim); margin-top: -8px; margin-bottom: 14px; }
 .detail-topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.favorite-btn {
+  flex: 0 0 auto;
+  width: 34px; height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--card-border);
+  background: none;
+  color: var(--ink-dim);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+.favorite-btn[aria-pressed="true"] { color: var(--yellow); border-color: var(--yellow); }
+.chip--removable { display: inline-flex; align-items: center; gap: 6px; cursor: default; }
+.chip--removable button {
+  border: none; background: none; color: inherit;
+  font-size: 0.9rem; line-height: 1; cursor: pointer; padding: 0;
+}
 
 /* ------------------------------------------------------------- Impression */
 /* engine.css passe deja le fond en blanc/texte en noir et masque les ecrans
@@ -299,9 +317,10 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus { outl
    papier (les teintes ambre/sauge, pensees pour un fond sombre, manquent de
    contraste sur blanc), et retire les fonds/ombres decoratifs. */
 @media print {
-  .version-badge, .skip-link, .detail-topbar, #screen-detail .form-actions { display: none !important; }
+  .version-badge, .skip-link, .detail-topbar, #screen-detail .form-actions,
+  #detail-share-block, #book-back-btn, #book-print-btn { display: none !important; }
   .panel { background: none; border: none; box-shadow: none; padding: 0; }
-  #screen-detail h2, .detail-heading, .chip, .detail-note { color: #000 !important; }
+  #screen-detail h2, #screen-book h2, .detail-heading, .chip, .detail-note { color: #000 !important; }
   .chip { background: none !important; border: 1px solid #000; }
   .detail-list li {
     background: none !important;
@@ -312,8 +331,14 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus { outl
   .detail-note { background: none !important; border: 1px solid #999 !important; }
   .detail-photos { overflow: visible; flex-wrap: wrap; }
   .detail-photos img { max-height: 8cm; break-inside: avoid; }
+  .book-recipe { break-after: page; }
 }
 @page { margin: 1.5cm; }
+
+/* -------------------------------------------------------- Export "livre" */
+#screen-book { align-items: stretch; }
+.book-recipe { width: 100%; padding-bottom: 24px; margin-bottom: 24px; border-bottom: 1px solid var(--card-border); }
+.book-recipe:last-child { border-bottom: none; }
 .detail-heading {
   font-size: 0.85rem; font-weight: 800; color: var(--blue);
   text-transform: uppercase; letter-spacing: 0.5px;

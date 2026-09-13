@@ -1,15 +1,17 @@
 rules_version = '2';
 
 // Mes Recettes — chaque recette appartient a une seule utilisatrice
-// (ownerId), qui est la seule a pouvoir la lire/modifier/supprimer.
-// `sharedWith` est reserve a une future fonctionnalite de partage : force
-// vide a la creation, jamais lu ici pour l'instant (pas de migration a
-// prevoir le jour ou on l'active : il suffira d'elargir `allow read` a
-// `resource.data.sharedWith.hasAny([request.auth.uid])`).
+// (ownerId), qui est la seule a pouvoir la creer/modifier/supprimer.
+// `sharedWith` (liste d'uid) : la proprietaire seule peut le modifier (via
+// `allow update`, qui n'a pas de contrainte dessus) ; quiconque y figure a
+// un acces en lecture seule, comme l'admin.
 service cloud.firestore {
   match /databases/{database}/documents {
     function isOwner(data) {
       return request.auth != null && request.auth.uid == data.ownerId;
+    }
+    function isSharedWithMe(data) {
+      return request.auth != null && ('sharedWith' in data) && data.sharedWith.hasAny([request.auth.uid]);
     }
     // UID fige du compte administrateur (lecture seule sur toutes les
     // recettes) : un seul compte pour cette app perso, pas besoin d'une
@@ -19,9 +21,10 @@ service cloud.firestore {
     }
 
     match /recipes/{recipeId} {
-      // Lecture seule pour l'admin : ni creation, ni modification, ni
-      // suppression des recettes d'une autre utilisatrice.
-      allow read: if isOwner(resource.data) || isAdmin();
+      // Lecture seule pour l'admin et les comptes avec qui la recette est
+      // partagee : ni creation, ni modification, ni suppression d'une
+      // recette dont on n'est pas proprietaire.
+      allow read: if isOwner(resource.data) || isAdmin() || isSharedWithMe(resource.data);
 
       allow create: if request.auth != null
         && request.resource.data.ownerId == request.auth.uid
@@ -34,6 +37,17 @@ service cloud.firestore {
         && request.resource.data.ownerId == resource.data.ownerId;
 
       allow delete: if isOwner(resource.data);
+    }
+
+    // Annuaire minimal uid -> e-mail, alimente au login (voir
+    // upsertUserProfile dans recipes.js) : sert a retrouver l'uid d'une
+    // personne a qui partager une recette a partir de son e-mail. Chacune
+    // n'ecrit que sa propre fiche ; la lecture est ouverte a toute
+    // utilisatrice connectee (necessaire pour la recherche par e-mail, et
+    // sans donnee sensible au-dela de l'e-mail deja visible dans l'app).
+    match /users/{uid} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid;
     }
   }
 }

@@ -6,14 +6,18 @@ import {
   watchAuth, signUp, signIn, logOut, resetPassword, authErrorMessage,
   signInWithGoogle, consumeRedirectError,
 } from './auth.js';
-import { subscribeToRecipes, subscribeToAllRecipes, saveRecipe, deleteRecipe, recipePhotos } from './recipes.js';
+import {
+  subscribeToRecipes, subscribeToAllRecipes, subscribeToSharedWithMe,
+  saveRecipe, deleteRecipe, recipePhotos, toggleFavorite,
+  upsertUserProfile, findUserByEmail, getUserEmail, shareRecipeWith, unshareRecipeWith,
+} from './recipes.js';
 
 // Doit rester identique a l'UID code en dur dans firestore.rules
 // (isAdmin()) : la vraie securite vient des regles, ceci ne sert qu'a
 // afficher/masquer le bouton cote interface.
 var ADMIN_UID = 'EwBMsqx4MGXHNHcPlkpb7StazJp2';
 
-var APP_VERSION = 'v1.5.1';
+var APP_VERSION = 'v1.6.0';
 var E = window.AppEngine;
 var DATA = window.APP_DATA || {};
 
@@ -36,9 +40,11 @@ E.on('screen:back', function () { E.screens.show('screen-home', { push: false })
 var currentUser = null;
 var currentUserEmail = '';
 var recipes = [];
-var allRecipes = [];  // vue admin uniquement
+var allRecipes = [];    // vue admin uniquement
+var sharedRecipes = []; // vue "partage avec moi"
 var unsubscribeRecipes = null;
 var unsubscribeAllRecipes = null;
+var unsubscribeShared = null;
 var authMode = 'signin';
 var editingRecipe = null;
 var viewingRecipe = null;
@@ -281,6 +287,7 @@ var DIET_LABELS = {
 
 function chipsFor(recipe) {
   var chips = [];
+  if (recipe.favorite) chips.push('★ Favori');
   if (recipe.category) chips.push(recipe.category);
   var totalMin = (recipe.prepMinutes || 0) + (recipe.cookMinutes || 0);
   if (totalMin) chips.push(totalMin + ' min');
@@ -367,14 +374,16 @@ function foldAccents(s) {
   return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
-function filterRecipes(list, searchEl, categoryEl) {
+function filterRecipes(list, searchEl, categoryEl, favoritesEl) {
   var search = foldAccents((searchEl.value || '').trim().toLowerCase());
   var category = categoryEl.value;
   var categoryLower = category.toLowerCase();
+  var favoritesOnly = !!(favoritesEl && favoritesEl.checked);
   return list.filter(function (r) {
     var matchSearch = !search || foldAccents((r.title || '').toLowerCase()).indexOf(search) !== -1;
     var matchCat = !category || (r.category || '').toLowerCase() === categoryLower;
-    return matchSearch && matchCat;
+    var matchFav = !favoritesOnly || !!r.favorite;
+    return matchSearch && matchCat && matchFav;
   });
 }
 
@@ -424,7 +433,7 @@ function renderRecipeCard(recipe, returnScreen, showOwner) {
 function renderList() {
   var list = E.$('#recipe-list');
   var empty = E.$('#empty-state');
-  var filtered = filterRecipes(recipes, E.$('#search-input'), E.$('#category-filter'));
+  var filtered = filterRecipes(recipes, E.$('#search-input'), E.$('#category-filter'), E.$('#favorites-filter'));
 
   list.textContent = '';
   filtered.forEach(function (r) { list.appendChild(renderRecipeCard(r, 'screen-home', false)); });
@@ -443,6 +452,7 @@ function renderList() {
 
 E.$('#search-input').addEventListener('input', renderList);
 E.$('#category-filter').addEventListener('change', renderList);
+E.$('#favorites-filter').addEventListener('change', renderList);
 E.$('#new-recipe-btn').addEventListener('click', function () { openForm(null, 'screen-home'); });
 E.$('#logout-btn').addEventListener('click', function () { logOut(); });
 
@@ -450,11 +460,16 @@ E.$('#logout-btn').addEventListener('click', function () { logOut(); });
 function openDetail(recipe, returnScreen) {
   viewingRecipe = recipe;
   detailReturnScreen = returnScreen || 'screen-home';
-  // Modifier/Supprimer restent reserves a la proprietaire de la recette,
-  // meme pour l'admin qui parcourt en lecture seule (les regles Firestore
-  // refuseraient de toute facon l'ecriture, mais autant ne pas proposer un
-  // bouton qui echouerait).
-  E.$('#detail-owner-actions').hidden = recipe.ownerId !== currentUser;
+  // Modifier/Supprimer/Partager restent reserves a la proprietaire de la
+  // recette, meme pour l'admin qui parcourt en lecture seule (les regles
+  // Firestore refuseraient de toute facon l'ecriture, mais autant ne pas
+  // proposer un bouton qui echouerait).
+  var isMine = recipe.ownerId === currentUser;
+  E.$('#detail-owner-actions').hidden = !isMine;
+  E.$('#detail-share-block').hidden = !isMine;
+  if (isMine) renderShareList(recipe);
+
+  setFavoriteBtn(!!recipe.favorite);
 
   var photosWrap = E.$('#detail-photos');
   var photos = recipePhotos(recipe);
@@ -496,6 +511,104 @@ E.$('#detail-print-btn').addEventListener('click', function () {
 });
 E.$('#detail-edit-btn').addEventListener('click', function () {
   if (viewingRecipe) openForm(viewingRecipe, 'screen-detail');
+});
+
+/* ------------------------------------------------------------- Favoris */
+function setFavoriteBtn(isFav) {
+  var btn = E.$('#detail-favorite-btn');
+  btn.textContent = isFav ? '★' : '☆';
+  btn.setAttribute('aria-pressed', String(isFav));
+}
+E.$('#detail-favorite-btn').addEventListener('click', function () {
+  if (!viewingRecipe) return;
+  var next = !viewingRecipe.favorite;
+  setFavoriteBtn(next); // optimiste : pas d'attente reseau pour un simple toggle
+  viewingRecipe.favorite = next;
+  toggleFavorite(viewingRecipe.id, next).catch(function (err) {
+    setFavoriteBtn(!next);
+    viewingRecipe.favorite = !next;
+    E.announce('Favori non enregistré : ' + (err && err.message ? err.message : 'erreur.'), true);
+  });
+});
+
+/* ----------------------------------------------------------- Dupliquer */
+function openFormAsDuplicate(recipe) {
+  openForm(null, 'screen-home');
+  E.$('#field-title').value = recipe.title + ' (copie)';
+  E.$('#field-category').value = recipe.category || '';
+  E.$('#field-prep-time').value = recipe.prepMinutes || '';
+  E.$('#field-cook-time').value = recipe.cookMinutes || '';
+  E.$('#field-servings').value = recipe.servings || '';
+  setRating(E.$('#field-difficulty'), recipe.difficulty || 0);
+  setRating(E.$('#field-budget'), recipe.budget || 0);
+  E.$('#field-season').value = recipe.season || '';
+  E.$('#field-conservation').value = recipe.conservationDays || '';
+  setDiets(E.$('#field-diets'), recipe.diets || []);
+  E.$('#field-note').value = recipe.note || '';
+  // Pas de photos sur la copie : elles restent liees au chemin Storage de
+  // l'originale (les dupliquer couterait un upload complet a chaque copie,
+  // et les reutiliser telles quelles casserait la copie si l'originale est
+  // supprimee).
+  resetDynamicList(E.$('#ingredients-list'), 'ex. 200 g de farine', recipe.ingredients);
+  resetDynamicList(E.$('#steps-list'), 'Décris cette étape…', recipe.steps);
+}
+E.$('#detail-duplicate-btn').addEventListener('click', function () {
+  if (viewingRecipe) openFormAsDuplicate(viewingRecipe);
+});
+
+/* -------------------------------------------------------------- Partage */
+function renderShareList(recipe) {
+  var wrap = E.$('#share-list');
+  wrap.textContent = '';
+  (recipe.sharedWith || []).forEach(function (uid) {
+    var chip = document.createElement('span');
+    chip.className = 'chip chip--removable';
+    var label = document.createElement('span');
+    label.textContent = '…';
+    chip.appendChild(label);
+    var rm = document.createElement('button');
+    rm.type = 'button';
+    rm.textContent = '×';
+    rm.setAttribute('aria-label', 'Retirer ce partage');
+    rm.addEventListener('click', function () {
+      unshareRecipeWith(recipe.id, uid)
+        .then(function () {
+          recipe.sharedWith = (recipe.sharedWith || []).filter(function (u) { return u !== uid; });
+          renderShareList(recipe);
+          E.announce('Partage retiré.');
+        })
+        .catch(function (err) { showError('#share-error', err && err.message ? err.message : 'Erreur.'); });
+    });
+    chip.appendChild(rm);
+    wrap.appendChild(chip);
+    getUserEmail(uid).then(function (email) { label.textContent = email || uid; });
+  });
+}
+
+E.$('#share-add-btn').addEventListener('click', function () {
+  if (!viewingRecipe) return;
+  hideError('#share-error');
+  var email = E.$('#share-email-input').value.trim().toLowerCase();
+  if (!email) return;
+  findUserByEmail(email).then(function (uid) {
+    if (!uid) {
+      showError('#share-error', "Aucun compte trouvé avec cet e-mail (la personne doit s'être déjà connectée une fois à l'app).");
+      return;
+    }
+    if (uid === currentUser) { showError('#share-error', 'C’est déjà ta recette.'); return; }
+    if ((viewingRecipe.sharedWith || []).indexOf(uid) !== -1) {
+      showError('#share-error', 'Déjà partagé avec cette personne.');
+      return;
+    }
+    return shareRecipeWith(viewingRecipe.id, uid).then(function () {
+      viewingRecipe.sharedWith = (viewingRecipe.sharedWith || []).concat([uid]);
+      E.$('#share-email-input').value = '';
+      renderShareList(viewingRecipe);
+      E.announce('Recette partagée.');
+    });
+  }).catch(function (err) {
+    showError('#share-error', err && err.message ? err.message : 'Erreur.');
+  });
 });
 E.$('#detail-delete-btn').addEventListener('click', function () {
   if (!viewingRecipe) return;
@@ -732,12 +845,28 @@ function renderAdminList() {
 E.$('#admin-search-input').addEventListener('input', renderAdminList);
 E.$('#admin-category-filter').addEventListener('change', renderAdminList);
 
+// Estimation (pas un chiffre facture) : seule la Storage compte vraiment
+// dans les quotas gratuits chez nous, et elle n'est pas consultable depuis
+// le navigateur (l'API de monitoring exige des identifiants serveur). On
+// approxime en sommant les tailles des photos deja connues du client.
+function updateAdminUsage() {
+  var totalBytes = 0;
+  allRecipes.forEach(function (r) {
+    recipePhotos(r).forEach(function (p) { totalBytes += p.sizeBytes || 0; });
+  });
+  var mb = totalBytes / (1024 * 1024);
+  E.$('#admin-usage').textContent = 'Espace photos utilisé (estimation) : ' + mb.toFixed(1)
+    + ' Mo / 5000 Mo gratuits — ' + allRecipes.length + ' recette' + (allRecipes.length > 1 ? 's' : '')
+    + ', tous comptes confondus.';
+}
+
 E.$('#admin-btn').addEventListener('click', function () {
   E.$('#admin-search-input').value = '';
   unsubscribeAllRecipes = subscribeToAllRecipes(function (list) {
     allRecipes = list;
     buildCategoryOptions(E.$('#admin-category-filter'), allRecipes);
     renderAdminList();
+    updateAdminUsage();
   }, function (err) {
     showVisibleError('Erreur de synchronisation (admin)', err);
   });
@@ -747,6 +876,139 @@ E.$('#admin-back-btn').addEventListener('click', function () {
   if (unsubscribeAllRecipes) { unsubscribeAllRecipes(); unsubscribeAllRecipes = null; }
   allRecipes = [];
   E.screens.show('screen-home', { push: true });
+});
+
+/* ------------------------------------------------------ Partage avec moi */
+function renderSharedList() {
+  var wrap = E.$('#shared-recipe-list');
+  var empty = E.$('#shared-empty-state');
+  var filtered = filterRecipes(sharedRecipes, E.$('#shared-search-input'), E.$('#shared-category-filter'));
+
+  wrap.textContent = '';
+  filtered.forEach(function (r) { wrap.appendChild(renderRecipeCard(r, 'screen-shared', true)); });
+
+  if (filtered.length === 0) {
+    empty.hidden = false;
+    empty.textContent = sharedRecipes.length === 0
+      ? "Personne n'a encore partagé de recette avec toi."
+      : 'Aucune recette ne correspond à ta recherche.';
+  } else {
+    empty.hidden = true;
+  }
+}
+
+E.$('#shared-search-input').addEventListener('input', renderSharedList);
+E.$('#shared-category-filter').addEventListener('change', renderSharedList);
+
+E.$('#shared-btn').addEventListener('click', function () {
+  E.$('#shared-search-input').value = '';
+  unsubscribeShared = subscribeToSharedWithMe(currentUser, function (list) {
+    sharedRecipes = list;
+    buildCategoryOptions(E.$('#shared-category-filter'), sharedRecipes);
+    renderSharedList();
+  }, function (err) {
+    showVisibleError('Erreur de synchronisation (partagé)', err);
+  });
+  E.screens.show('screen-shared', { push: true });
+});
+E.$('#shared-back-btn').addEventListener('click', function () {
+  if (unsubscribeShared) { unsubscribeShared(); unsubscribeShared = null; }
+  sharedRecipes = [];
+  E.screens.show('screen-home', { push: true });
+});
+
+/* --------------------------------------------------------------- Export */
+E.$('#export-json-btn').addEventListener('click', function () {
+  var data = recipes.map(function (r) {
+    return {
+      title: r.title, category: r.category, prepMinutes: r.prepMinutes, cookMinutes: r.cookMinutes,
+      servings: r.servings, difficulty: r.difficulty, budget: r.budget, season: r.season,
+      diets: r.diets, conservationDays: r.conservationDays, note: r.note,
+      ingredients: r.ingredients, steps: r.steps, favorite: !!r.favorite,
+      photos: recipePhotos(r).map(function (p) { return p.url; }),
+    };
+  });
+  var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'mes-recettes-' + E.history.dayStr(Date.now()) + '.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  E.announce('Export JSON téléchargé.');
+});
+
+function appendBookRecipe(wrap, r) {
+  var block = document.createElement('div');
+  block.className = 'book-recipe';
+
+  var photos = recipePhotos(r);
+  if (photos.length) {
+    var photosWrap = document.createElement('div');
+    photosWrap.className = 'detail-photos';
+    photos.forEach(function (p) {
+      var img = document.createElement('img');
+      img.src = p.url;
+      img.alt = '';
+      photosWrap.appendChild(img);
+    });
+    block.appendChild(photosWrap);
+  }
+
+  var h2 = document.createElement('h2');
+  h2.textContent = r.title;
+  block.appendChild(h2);
+
+  var meta = document.createElement('div');
+  meta.className = 'chip-row';
+  renderChips(meta, chipsFor(r));
+  block.appendChild(meta);
+
+  var ingHeading = document.createElement('h3');
+  ingHeading.className = 'detail-heading';
+  ingHeading.textContent = 'Ingrédients';
+  block.appendChild(ingHeading);
+  var ingList = document.createElement('ul');
+  ingList.className = 'detail-list';
+  fillList(ingList, r.ingredients);
+  block.appendChild(ingList);
+
+  var stepHeading = document.createElement('h3');
+  stepHeading.className = 'detail-heading';
+  stepHeading.textContent = 'Étapes';
+  block.appendChild(stepHeading);
+  var stepList = document.createElement('ol');
+  stepList.className = 'detail-list detail-list--steps';
+  fillList(stepList, r.steps);
+  block.appendChild(stepList);
+
+  if (r.note) {
+    var noteHeading = document.createElement('h3');
+    noteHeading.className = 'detail-heading';
+    noteHeading.textContent = 'Note personnelle';
+    block.appendChild(noteHeading);
+    var noteP = document.createElement('p');
+    noteP.className = 'detail-note';
+    noteP.textContent = r.note;
+    block.appendChild(noteP);
+  }
+
+  wrap.appendChild(block);
+}
+
+E.$('#export-book-btn').addEventListener('click', function () {
+  var wrap = E.$('#book-content');
+  wrap.textContent = '';
+  recipes.forEach(function (r) { appendBookRecipe(wrap, r); });
+  E.screens.show('screen-book', { push: true });
+});
+E.$('#book-back-btn').addEventListener('click', function () {
+  E.screens.show('screen-home', { push: true });
+});
+E.$('#book-print-btn').addEventListener('click', function () {
+  window.print();
 });
 
 /* --------------------------------------------------------------- Auth */
@@ -796,6 +1058,9 @@ watchAuth(function (user) {
     currentUser = user.uid;
     currentUserEmail = user.email || '';
     E.$('#admin-btn').hidden = currentUser !== ADMIN_UID;
+    // Alimente l'annuaire uid -> e-mail (necessaire pour partager par
+    // e-mail) ; best-effort, ne doit pas bloquer la connexion si ca echoue.
+    upsertUserProfile(currentUser, currentUserEmail).catch(function () {});
     // L'ecran d'accueil s'affiche dans tous les cas : une erreur Firestore
     // (ex. conflit de persistence locale, gere dans startRecipesSubscription)
     // ne doit jamais bloquer la transition post-connexion.
@@ -806,7 +1071,9 @@ watchAuth(function (user) {
     currentUserEmail = '';
     stopRecipesSubscription();
     if (unsubscribeAllRecipes) { unsubscribeAllRecipes(); unsubscribeAllRecipes = null; }
+    if (unsubscribeShared) { unsubscribeShared(); unsubscribeShared = null; }
     allRecipes = [];
+    sharedRecipes = [];
     E.$('#auth-form').reset();
     setAuthMode('signin');
     E.screens.show('screen-auth', { push: false });
