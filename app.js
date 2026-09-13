@@ -18,7 +18,7 @@ import {
 // afficher/masquer le bouton cote interface.
 var ADMIN_UID = 'EwBMsqx4MGXHNHcPlkpb7StazJp2';
 
-var APP_VERSION = 'v1.7.2';
+var APP_VERSION = 'v1.7.3';
 var E = window.AppEngine;
 var DATA = window.APP_DATA || {};
 
@@ -297,6 +297,7 @@ function isFavoritedByMe(recipe) {
 
 function chipsFor(recipe) {
   var chips = [];
+  if (isFavoritedByMe(recipe)) chips.push('★');
   if (recipe.category) chips.push(recipe.category);
   var totalMin = (recipe.prepMinutes || 0) + (recipe.cookMinutes || 0);
   if (totalMin) chips.push(totalMin + ' min');
@@ -313,7 +314,7 @@ function renderChips(el, chips) {
   el.textContent = '';
   chips.forEach(function (c) {
     var chip = document.createElement('span');
-    chip.className = 'chip';
+    chip.className = 'chip' + (c === '★' ? ' chip--favorite' : '');
     chip.textContent = c;
     el.appendChild(chip);
   });
