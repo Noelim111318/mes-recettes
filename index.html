@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="fr" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Mes Recettes</title>
+  <meta name="description" content="Mes Recettes — PWA installable, fonctionne hors-ligne.">
+  <meta name="app-version" content="v1.0.0">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#2B1B12">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Mes Recettes">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<a class="skip-link" href="#main">Aller au contenu</a>
+
+<main class="container" id="main">
+  <div class="version-badge" id="app-version">v1.0.0</div>
+
+  <div class="install-row" id="install-row" hidden>
+    <button class="install-btn" id="install-btn" type="button" aria-label="Installer l'application">📲 Installer l'appli</button>
+    <button class="install-dismiss" id="install-dismiss" type="button">Masquer</button>
+    <p class="install-hint" id="install-hint" role="status" hidden></p>
+  </div>
+
+  <!-- ECRAN 1 : connexion / creation de compte -->
+  <div class="screen active" id="screen-auth">
+    <div class="panel auth-panel">
+      <h1>🍲 Mes Recettes</h1>
+      <p class="auth-sub">Ton carnet de recettes, privé et disponible hors-ligne.</p>
+      <form class="auth-form" id="auth-form" novalidate>
+        <label class="form-field">
+          <span class="form-label">E-mail</span>
+          <input class="form-input" type="email" id="auth-email" autocomplete="email" required>
+        </label>
+        <label class="form-field">
+          <span class="form-label">Mot de passe</span>
+          <input class="form-input" type="password" id="auth-password" autocomplete="current-password" minlength="6" required>
+        </label>
+        <p class="form-error" id="auth-error" role="alert" hidden></p>
+        <button class="btn btn--primary" type="submit" id="auth-submit">Se connecter</button>
+      </form>
+      <div class="auth-links">
+        <button class="btn btn--ghost" type="button" id="auth-toggle">Pas de compte ? Crée-en un</button>
+        <button class="btn btn--ghost" type="button" id="auth-forgot">Mot de passe oublié ?</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ECRAN 2 : liste des recettes -->
+  <div class="screen" id="screen-home">
+    <div class="topbar">
+      <div class="topbar-row">
+        <h1>Mes recettes</h1>
+        <button class="btn btn--ghost" type="button" id="logout-btn">Déconnexion</button>
+      </div>
+      <p class="offline-badge" id="offline-badge" role="status" hidden>📡 Hors-ligne — tes modifs seront synchronisées au retour du réseau.</p>
+      <div class="search-row">
+        <input class="form-input" type="search" id="search-input" placeholder="Rechercher une recette…" aria-label="Rechercher une recette">
+        <select class="form-input filter-select" id="category-filter" aria-label="Filtrer par catégorie">
+          <option value="">Toutes les catégories</option>
+        </select>
+      </div>
+      <button class="btn btn--primary" type="button" id="new-recipe-btn">+ Nouvelle recette</button>
+    </div>
+
+    <div class="recipe-list" id="recipe-list"></div>
+    <p class="empty-state" id="empty-state" hidden></p>
+  </div>
+
+  <!-- ECRAN 3 : creation / edition -->
+  <div class="screen" id="screen-form">
+    <div class="panel">
+      <h2 id="form-title">Nouvelle recette</h2>
+      <form id="recipe-form" novalidate>
+        <label class="form-field">
+          <span class="form-label">Titre</span>
+          <input class="form-input" type="text" id="field-title" required>
+        </label>
+
+        <div class="form-row">
+          <label class="form-field">
+            <span class="form-label">Catégorie</span>
+            <input class="form-input" type="text" id="field-category" list="category-suggestions" placeholder="Plat, dessert…">
+            <datalist id="category-suggestions"></datalist>
+          </label>
+          <label class="form-field form-field--narrow">
+            <span class="form-label">Temps (min)</span>
+            <input class="form-input" type="number" id="field-time" min="0" inputmode="numeric">
+          </label>
+          <label class="form-field form-field--narrow">
+            <span class="form-label">Portions</span>
+            <input class="form-input" type="number" id="field-servings" min="1" inputmode="numeric">
+          </label>
+        </div>
+
+        <div class="form-field">
+          <span class="form-label">Photo (optionnel)</span>
+          <input class="form-input" type="file" id="field-photo" accept="image/*">
+          <img class="photo-preview" id="photo-preview" alt="" hidden>
+        </div>
+
+        <div class="form-field">
+          <span class="form-label">Ingrédients</span>
+          <div class="dynamic-list" id="ingredients-list"></div>
+          <button class="btn btn--ghost" type="button" id="add-ingredient-btn">+ Ajouter un ingrédient</button>
+        </div>
+
+        <div class="form-field">
+          <span class="form-label">Étapes</span>
+          <div class="dynamic-list" id="steps-list"></div>
+          <button class="btn btn--ghost" type="button" id="add-step-btn">+ Ajouter une étape</button>
+        </div>
+
+        <p class="form-error" id="form-error" role="alert" hidden></p>
+        <div class="form-actions">
+          <button class="btn btn--ghost" type="button" id="form-cancel-btn">Annuler</button>
+          <button class="btn btn--primary" type="submit" id="form-submit-btn">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ECRAN 4 : detail d'une recette -->
+  <div class="screen" id="screen-detail">
+    <div class="panel">
+      <button class="btn btn--ghost" type="button" id="detail-back-btn">← Retour</button>
+      <img class="detail-photo" id="detail-photo" alt="" hidden>
+      <h2 id="detail-title"></h2>
+      <div class="chip-row" id="detail-meta"></div>
+      <h3 class="detail-heading">Ingrédients</h3>
+      <ul class="detail-list" id="detail-ingredients"></ul>
+      <h3 class="detail-heading">Étapes</h3>
+      <ol class="detail-list detail-list--steps" id="detail-steps"></ol>
+      <div class="form-actions">
+        <button class="btn btn--ghost" type="button" id="detail-delete-btn">Supprimer</button>
+        <button class="btn btn--primary" type="button" id="detail-edit-btn">Modifier</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="data.js"></script>
+<script src="engine/engine.js"></script>
+<script type="module" src="app.js"></script>
+
+</body>
+</html>

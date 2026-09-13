@@ -1,0 +1,11 @@
+# OS / editeurs
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+*.tmp
+
+# Police telechargee par tools/make-icons.py (si tu utilises le glyphe texte)
+tools/*.ttf
+__pycache__/

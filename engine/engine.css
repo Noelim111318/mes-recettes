@@ -1,0 +1,354 @@
+/* pwa-engine — coque visuelle commune.
+ *
+ * Importee en tete de app.css :   @import "engine/engine.css";
+ * L'app redefinit ensuite les variables --* de :root et ajoute ses styles.
+ *
+ * Theme par defaut "nuit violette". Tout est pilote par des tokens :root :
+ * surcharge --bg / --yellow / --blue / ... dans app.css et le reste suit
+ * (les teintes translucides sont derivees en color-mix). color-mix() est
+ * suppose disponible (Safari 16.2+, Chrome/Firefox 2023+).
+ */
+
+/* Nunito, auto-hebergee pour rester dispo hors-ligne. Retire ces blocs (et le
+   dossier engine/fonts/) si tu veux une autre police : le fallback system-ui
+   prend le relais. */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url('fonts/nunito-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url('fonts/nunito-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
+button, input, select, textarea { font: inherit; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+
+/* Focus visible seulement au clavier (pas au clic/tap). */
+:focus:not(:focus-visible) { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--focus, var(--blue));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Lien d'evitement : cache jusqu'a recevoir le focus clavier. */
+.skip-link {
+  position: fixed; top: 8px; left: 8px; z-index: 1000;
+  padding: 8px 14px; border-radius: 10px;
+  background: var(--yellow); color: var(--bg);
+  font-weight: 800; text-decoration: none;
+  transform: translateY(-160%);
+  transition: transform 0.15s ease;
+}
+.skip-link:focus { transform: none; }
+
+:root {
+  /* Police */
+  --font: 'Nunito', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  /* Fond */
+  --bg: #1A0A2E;
+  --bg-deep: #12071F;
+  --bg-grad-top: #1B0C2D;
+  --bg-glow: rgba(124, 92, 255, 0.35);
+
+  /* Surfaces */
+  --card: #2D1553;
+  --card-border: #3D1F72;
+  --panel-border: rgba(255, 214, 10, 0.25);
+  --track: #3D1F72;                 /* barres / jauges vides */
+  --shadow: rgba(11, 7, 18, 0.26);
+  --radius: 18px;
+
+  /* Texte */
+  --ink: #F0E6FF;
+  --ink-soft: #D6C4FF;
+  --ink-dim: #A98BD4;               /* remonte pour le contraste (AA sur --bg-deep) */
+  --purple-light: #F0E6FF;          /* retro-compat */
+
+  /* Accents */
+  --yellow: #FFD60A;
+  --green: #4ADE80;
+  --red: #FF6B6B;
+  --blue: #60A5FA;
+  --streak: #FF8C3C;               /* badge de serie */
+  --focus: var(--blue);
+
+  /* Teintes derivees (suivent l'accent si tu le surcharges) */
+  --blue-tint: color-mix(in srgb, var(--blue) 12%, transparent);
+  --blue-soft: color-mix(in srgb, var(--blue) 18%, transparent);
+  --blue-line: color-mix(in srgb, var(--blue) 32%, transparent);
+  --blue-edge: color-mix(in srgb, var(--blue) 55%, transparent);
+  --streak-tint: color-mix(in srgb, var(--streak) 16%, transparent);
+  --streak-line: color-mix(in srgb, var(--streak) 35%, transparent);
+  --yellow-glow: color-mix(in srgb, var(--yellow) 45%, transparent);
+
+  /* Etoiles */
+  --star-color: #FFFFFF;
+
+  /* Gabarit */
+  --maxw: 540px;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg-deep);
+  min-height: 100dvh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+  color: var(--ink);
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+/* Fond "nuit" fixe au viewport : pas de couture quand on scrolle. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at top, var(--bg-glow), transparent 38%),
+    linear-gradient(180deg, var(--bg-grad-top) 0%, var(--bg-deep) 100%);
+}
+
+/* --------------------------------------------------------------- Etoiles */
+.stars {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 0; overflow: hidden;
+}
+.star {
+  position: absolute;
+  background: var(--star-color);
+  border-radius: 50%;
+  opacity: 0;
+  animation: twinkle var(--d) ease-in-out infinite var(--delay);
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 0; transform: scale(0.5); }
+  50% { opacity: var(--op); transform: scale(1); }
+}
+
+/* ------------------------------------------------------------- Conteneur */
+.container {
+  position: relative; z-index: 1;
+  width: 100%; max-width: var(--maxw);
+  display: flex; flex-direction: column; align-items: center; gap: 20px;
+  padding-bottom: 28px;
+}
+
+/* --------------------------------------------------------------- Entete */
+.header {
+  position: relative;
+  text-align: center;
+  width: 100%;
+  padding-top: 22px;
+}
+.header h1 {
+  font-size: clamp(1.7rem, 5.4vw, 2.5rem);
+  font-weight: 900;
+  color: var(--yellow);
+  text-shadow: 0 0 20px var(--yellow-glow), 0 6px 18px var(--shadow);
+  letter-spacing: -0.8px;
+  line-height: 1.1;
+}
+.header p { font-size: 0.92rem; color: var(--ink-soft); margin-top: 6px; }
+
+.version-badge {
+  position: absolute; top: 0; right: 0;
+  display: inline-block;
+  font-size: 0.56rem; font-weight: 800;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  background: var(--blue-tint);
+  color: var(--blue);
+  border: 1px solid var(--blue-line);
+  border-radius: 999px;
+  padding: 4px 8px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.streak-badge {
+  display: inline-block; margin: 8px auto 0;
+  background: var(--streak-tint); color: var(--streak);
+  border: 1px solid var(--streak-line); border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 0.8rem; font-weight: 900; letter-spacing: 0.2px;
+}
+
+/* ------------------------------------------------ Bandeau d'installation */
+.install-row {
+  display: flex; align-items: center; justify-content: center;
+  flex-wrap: wrap; gap: 10px 14px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--blue-line);
+  border-radius: 16px;
+  background: var(--blue-tint);
+}
+.install-btn {
+  padding: 10px 18px;
+  border: 2px solid var(--blue-edge); border-radius: 999px;
+  background: var(--blue-soft); color: var(--ink);
+  font-weight: 900; font-size: 0.95rem;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+.install-btn:active { transform: scale(0.97); }
+@media (hover: hover) and (pointer: fine) {
+  .install-btn:hover { background: var(--blue-line); border-color: var(--blue); }
+}
+.install-btn:disabled { opacity: 0.5; cursor: default; }
+.install-dismiss {
+  background: none; border: none; color: var(--ink-dim);
+  font-size: 0.82rem; font-weight: 700;
+  cursor: pointer; text-decoration: underline;
+}
+.install-hint {
+  width: 100%; text-align: center;
+  font-size: 0.82rem; font-weight: 700; color: var(--ink-soft);
+  line-height: 1.4;
+}
+
+/* --------------------------------------------------------------- Ecrans */
+.screen { display: none; flex-direction: column; align-items: center; gap: 16px; width: 100%; }
+.screen.active { display: flex; }
+
+/* Une seule barre de defilement (page entiere). .screen-active est pose par
+   AppEngine.screens.show(). */
+body.screen-active {
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+
+/* -------------------------------------------------- Briques utilitaires */
+.panel {
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--card) 96%, transparent),
+    color-mix(in srgb, var(--bg) 94%, transparent));
+  border-radius: 24px;
+  padding: 20px;
+  width: 100%;
+  border: 2px solid var(--panel-border);
+  box-shadow: 0 14px 30px var(--shadow);
+}
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 16px;
+  width: 100%;
+  border: 1px solid var(--card-border);
+}
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 12px 16px; border: none; border-radius: 14px;
+  font-weight: 800; font-size: 1rem;
+  cursor: pointer; transition: transform 0.12s ease, background 0.12s ease;
+}
+.btn:active { transform: scale(0.98); }
+.btn--primary {
+  background: var(--yellow);
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--yellow) 86%, white),
+    color-mix(in srgb, var(--yellow) 92%, black));
+  color: var(--bg);
+  box-shadow: 0 8px 20px var(--yellow-glow);
+}
+.btn--primary:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+.btn--ghost {
+  background: none; color: var(--ink-dim); font-weight: 700; font-size: 0.85rem;
+  padding: 6px 8px;
+}
+
+/* --------------------------------------------------------------- Effets */
+.burst-container {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 999;
+}
+.burst-particle {
+  position: absolute;
+  width: 10px; height: 10px; border-radius: 50%;
+  animation: burst 0.8s ease-out forwards;
+}
+@keyframes burst {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(0); opacity: 0; }
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(6px); }
+}
+.shake { animation: shake 0.4s ease; }
+
+/* ------------------------------------------------------------- Semaine */
+.week-bars {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 6px; height: 74px; padding: 0 4px; width: 100%;
+}
+.week-col {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  height: 100%; justify-content: flex-end;
+}
+.week-bar {
+  width: 100%; max-width: 26px; min-height: 3px;
+  background: var(--track); border-radius: 6px 6px 3px 3px;
+  transition: height 0.4s ease;
+}
+.week-lab { font-size: 0.68rem; font-weight: 800; color: var(--ink-dim); }
+.week-summary { text-align: center; font-size: 0.82rem; font-weight: 700; color: var(--ink-soft); margin-top: 10px; }
+
+/* ---------------------------------------------------------- Contraste eleve */
+@media (prefers-contrast: more) {
+  :root {
+    --ink-dim: var(--ink-soft);
+    --panel-border: var(--yellow);
+    --card-border: var(--blue);
+    --blue-line: var(--blue);
+    --blue-edge: var(--blue);
+    --streak-line: var(--streak);
+    --track: color-mix(in srgb, var(--ink-dim) 55%, transparent);
+  }
+  .card, .panel { border-width: 2px; }
+  .btn--ghost { color: var(--ink); }
+}
+
+/* ------------------------------------------------------- Moins d'animation */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .star { opacity: var(--op); }        /* visibles mais figees */
+}
+
+/* --------------------------------------------------------------- Print */
+@media print {
+  body { background: #fff; color: #000; }
+  .stars, .burst-container, .install-row, .screen:not(.active) { display: none !important; }
+}
+
+@media (max-width: 420px) {
+  .container { gap: 12px; }
+  .panel { padding-left: 18px; padding-right: 18px; }
+}

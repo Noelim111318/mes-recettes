@@ -1,0 +1,31 @@
+rules_version = '2';
+
+// Mes Recettes — chaque recette appartient a une seule utilisatrice
+// (ownerId), qui est la seule a pouvoir la lire/modifier/supprimer.
+// `sharedWith` est reserve a une future fonctionnalite de partage : force
+// vide a la creation, jamais lu ici pour l'instant (pas de migration a
+// prevoir le jour ou on l'active : il suffira d'elargir `allow read` a
+// `resource.data.sharedWith.hasAny([request.auth.uid])`).
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(data) {
+      return request.auth != null && request.auth.uid == data.ownerId;
+    }
+
+    match /recipes/{recipeId} {
+      allow read: if isOwner(resource.data);
+
+      allow create: if request.auth != null
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.sharedWith is list
+        && request.resource.data.sharedWith.size() == 0
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0;
+
+      allow update: if isOwner(resource.data)
+        && request.resource.data.ownerId == resource.data.ownerId;
+
+      allow delete: if isOwner(resource.data);
+    }
+  }
+}
