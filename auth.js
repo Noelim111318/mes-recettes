@@ -7,6 +7,7 @@ import {
   signOut,
   sendPasswordResetEmail,
   GoogleAuthProvider,
+  signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
@@ -46,10 +47,18 @@ export function resetPassword(email) {
   return sendPasswordResetEmail(auth, email);
 }
 
-// Redirection plutot que popup : plus fiable en PWA installee (standalone),
-// ou les popups sont parfois bloquees/mal gerees par le navigateur.
+// Popup par defaut (marche dans un onglet de navigateur classique, pas de
+// rechargement de page donc pas de course avec la maj du service worker).
+// Repli en redirection si la popup est bloquee/indisponible (PWA installee
+// en mode standalone, certains navigateurs mobiles).
 export function signInWithGoogle() {
-  return signInWithRedirect(auth, googleProvider);
+  return signInWithPopup(auth, googleProvider).catch((err) => {
+    var code = err && err.code;
+    if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') {
+      return signInWithRedirect(auth, googleProvider);
+    }
+    throw err;
+  });
 }
 
 // A appeler une fois au demarrage : recupere l'erreur d'un signInWithGoogle

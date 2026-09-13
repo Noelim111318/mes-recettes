@@ -32,6 +32,10 @@
   --maxw: 640px;
 }
 
+/* Decouple du flux (plus de .header autour) : sinon il chevauche le titre
+   du premier ecran, faute de contexte de positionnement/marge dedie. */
+.version-badge { position: fixed; top: 10px; right: 12px; z-index: 2; }
+
 /* ------------------------------------------------------------ Ecran auth */
 .auth-panel { text-align: center; }
 .auth-panel h1 { font-size: clamp(1.6rem, 5vw, 2.2rem); color: var(--yellow); margin-bottom: 6px; }
