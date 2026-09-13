@@ -9,3 +9,9 @@ desktop.ini
 # Police telechargee par tools/make-icons.py (si tu utilises le glyphe texte)
 tools/*.ttf
 __pycache__/
+
+# Cle de compte de service (secret !) — sert une fois pour poser le secret
+# GitHub Actions, ne doit jamais etre commitee.
+mes-recettes-aea4e-*.json
+*-firebase-adminsdk-*.json
+
