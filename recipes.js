@@ -40,6 +40,18 @@ export function subscribeToRecipes(ownerId, onChange, onError) {
   }, onError);
 }
 
+// Toutes les recettes, tous comptes confondus — reserve a l'admin cote
+// regles Firestore (lecture seule) ; un compte non admin recoit une erreur
+// de permission si cette requete est lancee.
+export function subscribeToAllRecipes(onChange, onError) {
+  const q = query(RECIPES, orderBy('title'));
+  return onSnapshot(q, (snap) => {
+    const list = [];
+    snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+    onChange(list);
+  }, onError);
+}
+
 // Ancien format (v1.1.0 et avant, ou photos envoyees avant l'ajout des
 // miniatures) : normalise vers { url, path, thumbUrl, thumbPath }, avec la
 // photo pleine taille en repli si aucune miniature dediee n'existe.
@@ -95,6 +107,10 @@ export async function saveRecipe(ownerId, recipeId, fields, newPhotoFiles, remov
 
   const payload = {
     ownerId,
+    // Denormalise depuis auth.currentUser.email : evite d'avoir a resoudre
+    // un uid -> e-mail cote client (l'Admin SDK necessaire pour ca n'est
+    // pas accessible depuis le navigateur) pour la vue admin.
+    ownerEmail: fields.ownerEmail || '',
     title: fields.title,
     category: fields.category,
     prepMinutes: fields.prepMinutes,

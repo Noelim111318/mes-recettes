@@ -180,6 +180,7 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus { outl
 /* --------------------------------------------------------------- Topbar */
 .topbar { width: 100%; display: flex; flex-direction: column; gap: 12px; }
 .topbar-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.topbar-actions { display: flex; align-items: center; gap: 8px; }
 .topbar-row h1 { font-size: clamp(1.4rem, 4.5vw, 1.9rem); color: var(--yellow); }
 .offline-badge {
   font-size: 0.82rem; font-weight: 700; text-align: center;

@@ -6,9 +6,14 @@ import {
   watchAuth, signUp, signIn, logOut, resetPassword, authErrorMessage,
   signInWithGoogle, consumeRedirectError,
 } from './auth.js';
-import { subscribeToRecipes, saveRecipe, deleteRecipe, recipePhotos } from './recipes.js';
+import { subscribeToRecipes, subscribeToAllRecipes, saveRecipe, deleteRecipe, recipePhotos } from './recipes.js';
 
-var APP_VERSION = 'v1.3.7';
+// Doit rester identique a l'UID code en dur dans firestore.rules
+// (isAdmin()) : la vraie securite vient des regles, ceci ne sert qu'a
+// afficher/masquer le bouton cote interface.
+var ADMIN_UID = 'EwBMsqx4MGXHNHcPlkpb7StazJp2';
+
+var APP_VERSION = 'v1.4.0';
 var E = window.AppEngine;
 var DATA = window.APP_DATA || {};
 
@@ -29,12 +34,15 @@ E.on('screen:back', function () { E.screens.show('screen-home', { push: false })
 
 /* ---------------------------------------------------------------- Etat */
 var currentUser = null;
+var currentUserEmail = '';
 var recipes = [];
 var unsubscribeRecipes = null;
+var unsubscribeAllRecipes = null;
 var authMode = 'signin';
 var editingRecipe = null;
 var viewingRecipe = null;
 var formReturnScreen = 'screen-home';
+var detailReturnScreen = 'screen-home';
 var newPhotoFiles = [];       // File[] nouvellement choisis, pas encore uploades
 var keptPhotos = [];          // photos existantes conservees ({url, path}[])
 var removedPhotos = [];       // photos retirees ({path, thumbPath}[])
@@ -326,7 +334,7 @@ function updateCategoryOptions() {
   if (cats.indexOf(current) !== -1) select.value = current;
 }
 
-function renderRecipeCard(recipe) {
+function renderRecipeCard(recipe, returnScreen, showOwner) {
   var card = document.createElement('button');
   card.type = 'button';
   card.className = 'recipe-card';
@@ -353,13 +361,15 @@ function renderRecipeCard(recipe) {
   title.textContent = recipe.title;
   body.appendChild(title);
 
+  var chips = chipsFor(recipe);
+  if (showOwner && recipe.ownerEmail) chips.unshift(recipe.ownerEmail);
   var meta = document.createElement('div');
   meta.className = 'chip-row';
-  renderChips(meta, chipsFor(recipe));
+  renderChips(meta, chips);
   body.appendChild(meta);
   card.appendChild(body);
 
-  card.addEventListener('click', function () { openDetail(recipe); });
+  card.addEventListener('click', function () { openDetail(recipe, returnScreen); });
   return card;
 }
 
@@ -377,7 +387,7 @@ function renderList() {
   });
 
   list.textContent = '';
-  filtered.forEach(function (r) { list.appendChild(renderRecipeCard(r)); });
+  filtered.forEach(function (r) { list.appendChild(renderRecipeCard(r, 'screen-home', false)); });
 
   if (filtered.length === 0) {
     empty.hidden = false;
@@ -397,8 +407,14 @@ E.$('#new-recipe-btn').addEventListener('click', function () { openForm(null, 's
 E.$('#logout-btn').addEventListener('click', function () { logOut(); });
 
 /* ---------------------------------------------------------------- Detail */
-function openDetail(recipe) {
+function openDetail(recipe, returnScreen) {
   viewingRecipe = recipe;
+  detailReturnScreen = returnScreen || 'screen-home';
+  // Modifier/Supprimer restent reserves a la proprietaire de la recette,
+  // meme pour l'admin qui parcourt en lecture seule (les regles Firestore
+  // refuseraient de toute facon l'ecriture, mais autant ne pas proposer un
+  // bouton qui echouerait).
+  E.$('#detail-owner-actions').hidden = recipe.ownerId !== currentUser;
 
   var photosWrap = E.$('#detail-photos');
   var photos = recipePhotos(recipe);
@@ -433,7 +449,7 @@ function openDetail(recipe) {
 }
 
 E.$('#detail-back-btn').addEventListener('click', function () {
-  E.screens.show('screen-home', { push: true });
+  E.screens.show(detailReturnScreen, { push: true });
 });
 E.$('#detail-print-btn').addEventListener('click', function () {
   window.print();
@@ -448,7 +464,7 @@ E.$('#detail-delete-btn').addEventListener('click', function () {
     .then(function () {
       E.announce('Recette supprimée.');
       renderList();
-      E.screens.show('screen-home', { push: true });
+      E.screens.show(detailReturnScreen, { push: true });
     })
     .catch(function (err) {
       E.announce('Suppression impossible : ' + (err && err.message ? err.message : 'erreur.'), true);
@@ -546,6 +562,7 @@ E.$('#recipe-form').addEventListener('submit', function (e) {
 
   var fields = {
     title: title,
+    ownerEmail: currentUserEmail,
     category: normalizeCategory(E.$('#field-category').value),
     prepMinutes: Number(E.$('#field-prep-time').value) || 0,
     cookMinutes: Number(E.$('#field-cook-time').value) || 0,
@@ -624,6 +641,30 @@ function stopRecipesSubscription() {
   recipes = [];
 }
 
+/* ----------------------------------------------------------------- Admin */
+// Abonnement "toutes les recettes" demarre seulement a l'ouverture de
+// l'ecran admin (pas en continu) : evite des lectures Firestore inutiles
+// pour une fonctionnalite rarement utilisee.
+function renderAdminList(list) {
+  var wrap = E.$('#admin-recipe-list');
+  var empty = E.$('#admin-empty-state');
+  wrap.textContent = '';
+  list.forEach(function (r) { wrap.appendChild(renderRecipeCard(r, 'screen-admin', true)); });
+  empty.hidden = list.length > 0;
+  if (!list.length) empty.textContent = 'Aucune recette, tous comptes confondus.';
+}
+
+E.$('#admin-btn').addEventListener('click', function () {
+  unsubscribeAllRecipes = subscribeToAllRecipes(renderAdminList, function (err) {
+    showVisibleError('Erreur de synchronisation (admin)', err);
+  });
+  E.screens.show('screen-admin', { push: true });
+});
+E.$('#admin-back-btn').addEventListener('click', function () {
+  if (unsubscribeAllRecipes) { unsubscribeAllRecipes(); unsubscribeAllRecipes = null; }
+  E.screens.show('screen-home', { push: true });
+});
+
 /* --------------------------------------------------------------- Auth */
 function setAuthMode(mode) {
   authMode = mode;
@@ -669,6 +710,8 @@ consumeRedirectError().then(function (err) {
 watchAuth(function (user) {
   if (user) {
     currentUser = user.uid;
+    currentUserEmail = user.email || '';
+    E.$('#admin-btn').hidden = currentUser !== ADMIN_UID;
     // L'ecran d'accueil s'affiche dans tous les cas : une erreur Firestore
     // (ex. conflit de persistence locale, gere dans startRecipesSubscription)
     // ne doit jamais bloquer la transition post-connexion.
@@ -676,7 +719,9 @@ watchAuth(function (user) {
     startRecipesSubscription(currentUser);
   } else {
     currentUser = null;
+    currentUserEmail = '';
     stopRecipesSubscription();
+    if (unsubscribeAllRecipes) { unsubscribeAllRecipes(); unsubscribeAllRecipes = null; }
     E.$('#auth-form').reset();
     setAuthMode('signin');
     E.screens.show('screen-auth', { push: false });

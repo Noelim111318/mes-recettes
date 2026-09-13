@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Mes Recettes</title>
   <meta name="description" content="Mes Recettes — PWA installable, fonctionne hors-ligne.">
-  <meta name="app-version" content="v1.3.7">
+  <meta name="app-version" content="v1.4.0">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#2B1B12">
   <meta name="mobile-web-app-capable" content="yes">
@@ -24,7 +24,7 @@
 <a class="skip-link" href="#main">Aller au contenu</a>
 
 <main class="container" id="main">
-  <div class="version-badge" id="app-version">v1.3.7</div>
+  <div class="version-badge" id="app-version">v1.4.0</div>
 
   <div class="install-row" id="install-row" hidden>
     <button class="install-btn" id="install-btn" type="button" aria-label="Installer l'application">📲 Installer l'appli</button>
@@ -65,7 +65,10 @@
     <div class="topbar">
       <div class="topbar-row">
         <h1>Mes recettes</h1>
-        <button class="btn btn--ghost" type="button" id="logout-btn">Déconnexion</button>
+        <div class="topbar-actions">
+          <button class="btn btn--ghost" type="button" id="admin-btn" hidden>Admin</button>
+          <button class="btn btn--ghost" type="button" id="logout-btn">Déconnexion</button>
+        </div>
       </div>
       <p class="offline-badge" id="offline-badge" role="status" hidden>📡 Hors-ligne — tes modifs seront synchronisées au retour du réseau.</p>
       <div class="search-row">
@@ -222,11 +225,23 @@
         <h3 class="detail-heading">Note personnelle</h3>
         <p class="detail-note" id="detail-note"></p>
       </div>
-      <div class="form-actions">
+      <div class="form-actions" id="detail-owner-actions">
         <button class="btn btn--ghost" type="button" id="detail-delete-btn">Supprimer</button>
         <button class="btn btn--primary" type="button" id="detail-edit-btn">Modifier</button>
       </div>
     </div>
+  </div>
+
+  <!-- ECRAN 5 : administration (lecture seule, compte admin uniquement) -->
+  <div class="screen" id="screen-admin">
+    <div class="topbar">
+      <div class="topbar-row">
+        <h1>Toutes les recettes</h1>
+        <button class="btn btn--ghost" type="button" id="admin-back-btn">← Retour</button>
+      </div>
+    </div>
+    <div class="recipe-list" id="admin-recipe-list"></div>
+    <p class="empty-state" id="admin-empty-state" hidden></p>
   </div>
 </main>
 

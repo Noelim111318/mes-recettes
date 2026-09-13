@@ -11,9 +11,17 @@ service cloud.firestore {
     function isOwner(data) {
       return request.auth != null && request.auth.uid == data.ownerId;
     }
+    // UID fige du compte administrateur (lecture seule sur toutes les
+    // recettes) : un seul compte pour cette app perso, pas besoin d'une
+    // liste/role dynamique.
+    function isAdmin() {
+      return request.auth != null && request.auth.uid == 'EwBMsqx4MGXHNHcPlkpb7StazJp2';
+    }
 
     match /recipes/{recipeId} {
-      allow read: if isOwner(resource.data);
+      // Lecture seule pour l'admin : ni creation, ni modification, ni
+      // suppression des recettes d'une autre utilisatrice.
+      allow read: if isOwner(resource.data) || isAdmin();
 
       allow create: if request.auth != null
         && request.resource.data.ownerId == request.auth.uid
