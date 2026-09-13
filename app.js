@@ -6,9 +6,9 @@ import {
   watchAuth, signUp, signIn, logOut, resetPassword, authErrorMessage,
   signInWithGoogle, consumeRedirectError,
 } from './auth.js';
-import { subscribeToRecipes, saveRecipe, deleteRecipe } from './recipes.js';
+import { subscribeToRecipes, saveRecipe, deleteRecipe, recipePhotos } from './recipes.js';
 
-var APP_VERSION = 'v1.1.0';
+var APP_VERSION = 'v1.2.0';
 var E = window.AppEngine;
 var DATA = window.APP_DATA || {};
 
@@ -35,11 +35,17 @@ var authMode = 'signin';
 var editingRecipe = null;
 var viewingRecipe = null;
 var formReturnScreen = 'screen-home';
-var photoFile = null;
+var newPhotoFiles = [];       // File[] nouvellement choisis, pas encore uploades
+var keptPhotos = [];          // photos existantes conservees ({url, path}[])
+var removedPhotoPaths = [];   // chemins Storage des photos retirees
 
 /* --------------------------------------------------------- Utilitaires */
 function showError(sel, msg) { var el = E.$(sel); el.textContent = msg; el.hidden = false; }
 function hideError(sel) { var el = E.$(sel); el.hidden = true; el.textContent = ''; }
+function normalizeCategory(s) {
+  s = (s || '').trim();
+  return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : '';
+}
 
 /* -------------------------------------------------------- Dictee (micro) */
 // Les claviers mobiles ont deja un micro integre, mais il n'est pas garanti
@@ -65,7 +71,7 @@ function attachMic(input, btn) {
       var transcript = e.results[0][0].transcript;
       var sep = input.value && !/\s$/.test(input.value) ? ' ' : '';
       input.value = input.value ? input.value + sep + transcript : transcript;
-      input.focus();
+      // Pas de input.focus() ici : ça rouvrirait le clavier juste apres avoir dicte.
     };
     recognition.start();
   });
@@ -240,13 +246,22 @@ if (savedSearch) E.$('#search-input').value = savedSearch;
 function updateCategoryOptions() {
   var select = E.$('#category-filter');
   var current = select.value;
-  var cats = Array.from(new Set(recipes.map(function (r) { return r.category; }).filter(Boolean)))
-    .sort(function (a, b) { return a.localeCompare(b, 'fr'); });
+  // Regroupe sans tenir compte de la casse ("Dessert" et "dessert" comptent
+  // pour une seule categorie), en gardant la 1re graphie rencontree.
+  var seen = {};
+  var cats = [];
+  recipes.forEach(function (r) {
+    var c = r.category;
+    if (!c) return;
+    var key = c.toLowerCase();
+    if (!seen[key]) { seen[key] = true; cats.push(c); }
+  });
+  cats.sort(function (a, b) { return a.localeCompare(b, 'fr'); });
 
   select.textContent = '';
   var allOpt = document.createElement('option');
   allOpt.value = '';
-  allOpt.textContent = 'Catégorie';
+  allOpt.textContent = 'Toutes';
   select.appendChild(allOpt);
   cats.forEach(function (c) {
     var opt = document.createElement('option');
@@ -262,10 +277,11 @@ function renderRecipeCard(recipe) {
   card.type = 'button';
   card.className = 'recipe-card';
 
-  if (recipe.photoUrl) {
+  var photos = recipePhotos(recipe);
+  if (photos.length) {
     var img = document.createElement('img');
     img.className = 'recipe-card-photo';
-    img.src = recipe.photoUrl;
+    img.src = photos[0].url;
     img.alt = '';
     img.loading = 'lazy';
     card.appendChild(img);
@@ -299,9 +315,10 @@ function renderList() {
   var search = (E.$('#search-input').value || '').trim().toLowerCase();
   var category = E.$('#category-filter').value;
 
+  var categoryLower = category.toLowerCase();
   var filtered = recipes.filter(function (r) {
     var matchSearch = !search || (r.title || '').toLowerCase().indexOf(search) !== -1;
-    var matchCat = !category || r.category === category;
+    var matchCat = !category || (r.category || '').toLowerCase() === categoryLower;
     return matchSearch && matchCat;
   });
 
@@ -329,13 +346,20 @@ E.$('#logout-btn').addEventListener('click', function () { logOut(); });
 function openDetail(recipe) {
   viewingRecipe = recipe;
 
-  var photo = E.$('#detail-photo');
-  if (recipe.photoUrl) {
-    photo.src = recipe.photoUrl;
-    photo.hidden = false;
+  var photosWrap = E.$('#detail-photos');
+  var photos = recipePhotos(recipe);
+  photosWrap.textContent = '';
+  if (photos.length) {
+    photos.forEach(function (p) {
+      var img = document.createElement('img');
+      img.src = p.url;
+      img.alt = '';
+      img.loading = 'lazy';
+      photosWrap.appendChild(img);
+    });
+    photosWrap.hidden = false;
   } else {
-    photo.hidden = true;
-    photo.removeAttribute('src');
+    photosWrap.hidden = true;
   }
 
   E.$('#detail-title').textContent = recipe.title;
@@ -363,7 +387,7 @@ E.$('#detail-edit-btn').addEventListener('click', function () {
 E.$('#detail-delete-btn').addEventListener('click', function () {
   if (!viewingRecipe) return;
   if (!window.confirm('Supprimer « ' + viewingRecipe.title + ' » ? Cette action est définitive.')) return;
-  deleteRecipe(viewingRecipe.id, viewingRecipe.photoPath)
+  deleteRecipe(viewingRecipe.id, recipePhotos(viewingRecipe))
     .then(function () {
       E.announce('Recette supprimée.');
       E.screens.show('screen-home', { push: true });
@@ -374,10 +398,48 @@ E.$('#detail-delete-btn').addEventListener('click', function () {
 });
 
 /* ------------------------------------------------------------ Formulaire */
+function renderPhotoGallery() {
+  var wrap = E.$('#photo-gallery');
+  wrap.textContent = '';
+
+  keptPhotos.forEach(function (p, idx) {
+    wrap.appendChild(photoThumb(p.url, function () {
+      removedPhotoPaths.push(p.path);
+      keptPhotos.splice(idx, 1);
+      renderPhotoGallery();
+    }));
+  });
+  newPhotoFiles.forEach(function (file, idx) {
+    wrap.appendChild(photoThumb(URL.createObjectURL(file), function () {
+      newPhotoFiles.splice(idx, 1);
+      renderPhotoGallery();
+    }));
+  });
+}
+
+function photoThumb(src, onRemove) {
+  var box = document.createElement('div');
+  box.className = 'photo-thumb';
+  var img = document.createElement('img');
+  img.src = src;
+  img.alt = '';
+  var rm = document.createElement('button');
+  rm.type = 'button';
+  rm.className = 'photo-thumb-remove';
+  rm.setAttribute('aria-label', 'Retirer cette photo');
+  rm.textContent = '×';
+  rm.addEventListener('click', onRemove);
+  box.appendChild(img);
+  box.appendChild(rm);
+  return box;
+}
+
 function openForm(recipe, returnScreen) {
   editingRecipe = recipe || null;
   formReturnScreen = returnScreen || 'screen-home';
-  photoFile = null;
+  newPhotoFiles = [];
+  removedPhotoPaths = [];
+  keptPhotos = editingRecipe ? recipePhotos(editingRecipe).slice() : [];
 
   E.$('#form-title').textContent = editingRecipe ? 'Modifier la recette' : 'Nouvelle recette';
   E.$('#field-title').value = editingRecipe ? editingRecipe.title : '';
@@ -392,15 +454,7 @@ function openForm(recipe, returnScreen) {
   setDiets(E.$('#field-diets'), editingRecipe ? (editingRecipe.diets || []) : []);
   E.$('#field-note').value = editingRecipe ? (editingRecipe.note || '') : '';
   E.$('#field-photo').value = '';
-
-  var preview = E.$('#photo-preview');
-  if (editingRecipe && editingRecipe.photoUrl) {
-    preview.src = editingRecipe.photoUrl;
-    preview.hidden = false;
-  } else {
-    preview.hidden = true;
-    preview.removeAttribute('src');
-  }
+  renderPhotoGallery();
 
   resetDynamicList(E.$('#ingredients-list'), 'ex. 200 g de farine', editingRecipe ? editingRecipe.ingredients : null);
   resetDynamicList(E.$('#steps-list'), 'Décris cette étape…', editingRecipe ? editingRecipe.steps : null);
@@ -410,13 +464,10 @@ function openForm(recipe, returnScreen) {
 }
 
 E.$('#field-photo').addEventListener('change', function (e) {
-  var file = e.target.files && e.target.files[0];
-  photoFile = file || null;
-  if (file) {
-    var preview = E.$('#photo-preview');
-    preview.src = URL.createObjectURL(file);
-    preview.hidden = false;
-  }
+  var files = Array.prototype.slice.call(e.target.files || []);
+  newPhotoFiles = newPhotoFiles.concat(files);
+  e.target.value = ''; // permet de re-choisir le meme fichier plus tard
+  renderPhotoGallery();
 });
 
 E.$('#form-cancel-btn').addEventListener('click', function () {
@@ -437,7 +488,7 @@ E.$('#recipe-form').addEventListener('submit', function (e) {
 
   var fields = {
     title: title,
-    category: E.$('#field-category').value.trim(),
+    category: normalizeCategory(E.$('#field-category').value),
     prepMinutes: Number(E.$('#field-prep-time').value) || 0,
     cookMinutes: Number(E.$('#field-cook-time').value) || 0,
     servings: Number(E.$('#field-servings').value) || 0,
@@ -449,18 +500,17 @@ E.$('#recipe-form').addEventListener('submit', function (e) {
     note: E.$('#field-note').value.trim(),
     ingredients: ingredients,
     steps: steps,
-    photoUrl: editingRecipe ? editingRecipe.photoUrl : null,
-    photoPath: editingRecipe ? editingRecipe.photoPath : null,
+    photos: keptPhotos,
   };
 
   var submitBtn = E.$('#form-submit-btn');
   submitBtn.disabled = true;
 
-  saveRecipe(currentUser, editingRecipe ? editingRecipe.id : null, fields, photoFile)
+  saveRecipe(currentUser, editingRecipe ? editingRecipe.id : null, fields, newPhotoFiles, removedPhotoPaths)
     .then(function (result) {
       submitBtn.disabled = false;
       if (result.photoError) {
-        E.announce('Recette enregistrée. Photo non envoyée (hors-ligne ou erreur réseau) : réessaie en modifiant la recette une fois reconnecté.', true);
+        E.announce('Recette enregistrée. Certaines photos n’ont pas pu être envoyées (hors-ligne ou erreur réseau) : réessaie en modifiant la recette une fois reconnecté.', true);
       } else {
         E.announce('Recette enregistrée.');
       }

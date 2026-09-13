@@ -8,7 +8,7 @@
  *     puis ajoute tout nouveau fichier statique a APP_SHELL ci-dessous.
  */
 self.APP_SLUG = 'mes-recettes';
-self.APP_VERSION = 'v1.1.0';
+self.APP_VERSION = 'v1.2.0';
 
 self.APP_SHELL = [
   './',

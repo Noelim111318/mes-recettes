@@ -1,4 +1,4 @@
-/* Mes Recettes — CRUD Firestore + photo Storage.
+/* Mes Recettes — CRUD Firestore + photos Storage.
  *
  * Isolation par utilisatrice : chaque recette porte un `ownerId`, la requete
  * liste filtre dessus, et les regles Firestore (firestore.rules) refusent
@@ -9,7 +9,7 @@
 import { db, storage } from './firebase-init.js';
 import {
   collection, query, where, orderBy, onSnapshot,
-  addDoc, updateDoc, deleteDoc, doc, serverTimestamp,
+  addDoc, updateDoc, deleteDoc, doc,
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 import {
   ref, uploadBytes, getDownloadURL, deleteObject,
@@ -28,31 +28,41 @@ export function subscribeToRecipes(ownerId, onChange, onError) {
   }, onError);
 }
 
-// fields : { title, category, timeMinutes, servings, ingredients, steps,
-//            photoUrl, photoPath }  — les deux derniers = valeurs courantes
-// (celles de la recette existante en edition, ou null pour une creation).
-// photoFile : File|null, la nouvelle photo choisie (remplace l'existante).
-export async function saveRecipe(ownerId, recipeId, fields, photoFile) {
-  let photoUrl = fields.photoUrl ?? null;
-  let photoPath = fields.photoPath ?? null;
+// Ancien format (v1.1.0 et avant) : une seule photo dans photoUrl/photoPath.
+// Convertit a la volee vers le format tableau, sans migration Firestore.
+export function recipePhotos(recipe) {
+  if (recipe.photos) return recipe.photos;
+  if (recipe.photoUrl) return [{ url: recipe.photoUrl, path: recipe.photoPath || null }];
+  return [];
+}
+
+// fields : { title, category, prepMinutes, cookMinutes, servings, difficulty,
+//            budget, season, diets, conservationDays, note, ingredients,
+//            steps, photos }  — `photos` = les photos conservees (deja
+// existantes, moins celles retirees dans le formulaire).
+// newPhotoFiles : File[], nouvelles photos a uploader et ajouter.
+// removedPhotoPaths : string[], chemins Storage des photos retirees (a
+// supprimer apres l'ecriture reussie du document).
+export async function saveRecipe(ownerId, recipeId, fields, newPhotoFiles, removedPhotoPaths) {
+  const photos = (fields.photos || []).slice();
   let photoError = null;
 
-  if (photoFile) {
+  if (newPhotoFiles && newPhotoFiles.length) {
     if (!navigator.onLine) {
       photoError = new Error('offline');
     } else {
-      try {
-        const blob = await resizeImage(photoFile, MAX_DIM, JPEG_QUALITY);
-        const path = `recipes/${ownerId}/${randomId()}.jpg`;
-        const fileRef = ref(storage, path);
-        await uploadBytes(fileRef, blob, { contentType: 'image/jpeg' });
-        const newUrl = await getDownloadURL(fileRef);
-        const oldPath = photoPath;
-        photoUrl = newUrl;
-        photoPath = path;
-        if (oldPath) deleteObject(ref(storage, oldPath)).catch(() => {});
-      } catch (err) {
-        photoError = err; // on garde l'ancienne photo (ou aucune)
+      for (const file of newPhotoFiles) {
+        try {
+          const blob = await resizeImage(file, MAX_DIM, JPEG_QUALITY);
+          const path = `recipes/${ownerId}/${randomId()}.jpg`;
+          const fileRef = ref(storage, path);
+          await uploadBytes(fileRef, blob, { contentType: 'image/jpeg' });
+          const url = await getDownloadURL(fileRef);
+          photos.push({ url, path });
+        } catch (err) {
+          photoError = err; // on garde ce qui a deja ete envoye avant l'echec
+          break;
+        }
       }
     }
   }
@@ -72,9 +82,13 @@ export async function saveRecipe(ownerId, recipeId, fields, photoFile) {
     note: fields.note,
     ingredients: fields.ingredients,
     steps: fields.steps,
-    photoUrl,
-    photoPath,
-    updatedAt: serverTimestamp(),
+    photos,
+    // Horodatage client (pas serverTimestamp) : resout immediatement dans le
+    // cache local, y compris hors-ligne, pour que la liste (triee dessus)
+    // se remette a jour tout de suite au lieu d'attendre l'aller-retour
+    // serveur (pendant lequel un serverTimestamp() reste `null`, donc trie
+    // en dernier au lieu d'apparaitre en tete).
+    updatedAt: Date.now(),
   };
 
   let id = recipeId;
@@ -82,19 +96,21 @@ export async function saveRecipe(ownerId, recipeId, fields, photoFile) {
     await updateDoc(doc(db, 'recipes', id), payload);
   } else {
     payload.sharedWith = [];
-    payload.createdAt = serverTimestamp();
+    payload.createdAt = Date.now();
     const created = await addDoc(RECIPES, payload);
     id = created.id;
   }
 
+  (removedPhotoPaths || []).forEach((p) => { if (p) deleteObject(ref(storage, p)).catch(() => {}); });
+
   return { id, photoError };
 }
 
-export async function deleteRecipe(recipeId, photoPath) {
+export async function deleteRecipe(recipeId, photos) {
   await deleteDoc(doc(db, 'recipes', recipeId));
-  if (photoPath) {
-    try { await deleteObject(ref(storage, photoPath)); } catch (_err) { /* best effort */ }
-  }
+  (photos || []).forEach((p) => {
+    if (p && p.path) deleteObject(ref(storage, p.path)).catch(() => {});
+  });
 }
 
 function randomId() {

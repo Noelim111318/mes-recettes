@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Mes Recettes</title>
   <meta name="description" content="Mes Recettes — PWA installable, fonctionne hors-ligne.">
-  <meta name="app-version" content="v1.1.0">
+  <meta name="app-version" content="v1.2.0">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#2B1B12">
   <meta name="mobile-web-app-capable" content="yes">
@@ -24,7 +24,7 @@
 <a class="skip-link" href="#main">Aller au contenu</a>
 
 <main class="container" id="main">
-  <div class="version-badge" id="app-version">v1.1.0</div>
+  <div class="version-badge" id="app-version">v1.2.0</div>
 
   <div class="install-row" id="install-row" hidden>
     <button class="install-btn" id="install-btn" type="button" aria-label="Installer l'application">📲 Installer l'appli</button>
@@ -72,7 +72,7 @@
       <div class="search-row">
         <input class="form-input" type="search" id="search-input" placeholder="Rechercher une recette…" aria-label="Rechercher une recette">
         <select class="form-input filter-select" id="category-filter" aria-label="Filtrer par catégorie">
-          <option value="">Catégorie</option>
+          <option value="">Toutes</option>
         </select>
       </div>
       <button class="btn btn--primary" type="button" id="new-recipe-btn">+ Nouvelle recette</button>
@@ -143,7 +143,7 @@
         </div>
 
         <div class="form-row">
-          <label class="form-field form-field--narrow">
+          <label class="form-field">
             <span class="form-label">Saison</span>
             <select class="form-input" id="field-season">
               <option value="">—</option>
@@ -170,9 +170,9 @@
         </div>
 
         <div class="form-field">
-          <span class="form-label">Photo (optionnel)</span>
-          <input class="form-input" type="file" id="field-photo" accept="image/*">
-          <img class="photo-preview" id="photo-preview" alt="" hidden>
+          <span class="form-label">Photos (optionnel)</span>
+          <input class="form-input" type="file" id="field-photo" accept="image/*" multiple>
+          <div class="photo-gallery" id="photo-gallery"></div>
         </div>
 
         <div class="form-field">
@@ -208,7 +208,7 @@
   <div class="screen" id="screen-detail">
     <div class="panel">
       <button class="btn btn--ghost" type="button" id="detail-back-btn">← Retour</button>
-      <img class="detail-photo" id="detail-photo" alt="" hidden>
+      <div class="detail-photos" id="detail-photos" hidden></div>
       <h2 id="detail-title"></h2>
       <div class="chip-row" id="detail-meta"></div>
       <h3 class="detail-heading">Ingrédients</h3>
