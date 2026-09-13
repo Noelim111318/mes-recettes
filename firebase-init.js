@@ -11,6 +11,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.19.0/fireba
 import { getAuth } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
 import {
   initializeFirestore,
+  getFirestore,
   persistentLocalCache,
   persistentMultiTabManager,
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
@@ -47,6 +48,9 @@ export async function resetLocalPersistence() {
 // Repli en cache memoire (pas de persistence hors-ligne pour cette session,
 // mais l'app reste utilisable) si l'initialisation echoue -- ca peut arriver
 // une fois quand une session precedente a laisse un cache incompatible.
+// getFirestore() (pas un 2e initializeFirestore(), qui leve toujours une
+// erreur si on l'appelle une 2e fois sur la meme app) recupere/cree
+// l'instance par defaut, sans persistence explicite.
 function createFirestore() {
   try {
     return initializeFirestore(app, {
@@ -55,7 +59,7 @@ function createFirestore() {
   } catch (err) {
     console.warn('[firestore] persistence indisponible, repli memoire :', err);
     resetLocalPersistence();
-    return initializeFirestore(app, {});
+    return getFirestore(app);
   }
 }
 export const db = createFirestore();
