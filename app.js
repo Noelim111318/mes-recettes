@@ -13,7 +13,7 @@ import { subscribeToRecipes, subscribeToAllRecipes, saveRecipe, deleteRecipe, re
 // afficher/masquer le bouton cote interface.
 var ADMIN_UID = 'EwBMsqx4MGXHNHcPlkpb7StazJp2';
 
-var APP_VERSION = 'v1.4.1';
+var APP_VERSION = 'v1.4.2';
 var E = window.AppEngine;
 var DATA = window.APP_DATA || {};
 
@@ -336,12 +336,19 @@ function buildCategoryOptions(selectEl, list) {
   if (cats.indexOf(current) !== -1) selectEl.value = current;
 }
 
+// Decompose les caracteres accentues (e -> e + accent combinant) puis
+// retire les accents : "gateau" retrouve "gâteau" sans que l'utilisatrice
+// ait besoin de taper l'accent.
+function foldAccents(s) {
+  return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 function filterRecipes(list, searchEl, categoryEl) {
-  var search = (searchEl.value || '').trim().toLowerCase();
+  var search = foldAccents((searchEl.value || '').trim().toLowerCase());
   var category = categoryEl.value;
   var categoryLower = category.toLowerCase();
   return list.filter(function (r) {
-    var matchSearch = !search || (r.title || '').toLowerCase().indexOf(search) !== -1;
+    var matchSearch = !search || foldAccents((r.title || '').toLowerCase()).indexOf(search) !== -1;
     var matchCat = !category || (r.category || '').toLowerCase() === categoryLower;
     return matchSearch && matchCat;
   });
