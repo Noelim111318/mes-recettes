@@ -8,7 +8,7 @@ import {
 } from './auth.js';
 import { subscribeToRecipes, saveRecipe, deleteRecipe } from './recipes.js';
 
-var APP_VERSION = 'v1.0.0';
+var APP_VERSION = 'v1.0.1';
 var E = window.AppEngine;
 var DATA = window.APP_DATA || {};
 

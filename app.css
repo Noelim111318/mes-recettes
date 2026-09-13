@@ -32,9 +32,10 @@
   --maxw: 640px;
 }
 
-/* Decouple du flux (plus de .header autour) : sinon il chevauche le titre
-   du premier ecran, faute de contexte de positionnement/marge dedie. */
-.version-badge { position: fixed; top: 10px; right: 12px; z-index: 2; }
+/* Reste dans le flux, aligne a droite sur sa propre ligne (plus de .header
+   autour pour lui reserver cette place) : en position absolue/fixed il
+   finissait par chevaucher le titre ou le bandeau d'installation. */
+.version-badge { position: static; align-self: flex-end; margin-bottom: -4px; }
 
 /* ------------------------------------------------------------ Ecran auth */
 .auth-panel { text-align: center; }
