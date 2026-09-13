@@ -10,6 +10,7 @@ import {
   subscribeToRecipes, subscribeToAllRecipes, subscribeToSharedWithMe,
   saveRecipe, deleteRecipe, recipePhotos, toggleFavorite,
   upsertUserProfile, findUserByEmail, getUserEmail, shareRecipeWith, unshareRecipeWith,
+  fetchLegacyPhotoSize,
 } from './recipes.js';
 
 // Doit rester identique a l'UID code en dur dans firestore.rules
@@ -17,7 +18,7 @@ import {
 // afficher/masquer le bouton cote interface.
 var ADMIN_UID = 'EwBMsqx4MGXHNHcPlkpb7StazJp2';
 
-var APP_VERSION = 'v1.7.0';
+var APP_VERSION = 'v1.7.1';
 var E = window.AppEngine;
 var DATA = window.APP_DATA || {};
 
@@ -912,16 +913,36 @@ E.$('#admin-category-filter').addEventListener('change', renderAdminList);
 // Estimation (pas un chiffre facture) : seule la Storage compte vraiment
 // dans les quotas gratuits chez nous, et elle n'est pas consultable depuis
 // le navigateur (l'API de monitoring exige des identifiants serveur). On
-// approxime en sommant les tailles des photos deja connues du client.
+// approxime en sommant les tailles des photos ; celles envoyees avant le
+// champ `sizeBytes` (0 en base) sont redemandees a Storage a la volee et
+// mises en cache ici (jamais ecrites en base : l'admin n'a pas le droit de
+// modifier les recettes d'une autre personne, et ce n'est qu'une estimation).
+var legacyPhotoSizeCache = {};
+var adminUsageRequestId = 0;
 function updateAdminUsage() {
-  var totalBytes = 0;
-  allRecipes.forEach(function (r) {
-    recipePhotos(r).forEach(function (p) { totalBytes += p.sizeBytes || 0; });
+  var requestId = ++adminUsageRequestId;
+  var usageEl = E.$('#admin-usage');
+  var photos = [];
+  allRecipes.forEach(function (r) { recipePhotos(r).forEach(function (p) { photos.push(p); }); });
+
+  var sizes = photos.map(function (p) {
+    if (p.sizeBytes) return Promise.resolve(p.sizeBytes);
+    if (!p.path) return Promise.resolve(0);
+    if (p.path in legacyPhotoSizeCache) return Promise.resolve(legacyPhotoSizeCache[p.path]);
+    return fetchLegacyPhotoSize(p.path, p.thumbPath).then(function (bytes) {
+      legacyPhotoSizeCache[p.path] = bytes;
+      return bytes;
+    });
   });
-  var mb = totalBytes / (1024 * 1024);
-  E.$('#admin-usage').textContent = 'Espace photos utilisé (estimation) : ' + mb.toFixed(1)
-    + ' Mo / 5000 Mo gratuits — ' + allRecipes.length + ' recette' + (allRecipes.length > 1 ? 's' : '')
-    + ', tous comptes confondus.';
+
+  Promise.all(sizes).then(function (values) {
+    if (requestId !== adminUsageRequestId) return; // une vue plus recente a deja pris le relais
+    var totalBytes = values.reduce(function (a, b) { return a + b; }, 0);
+    var mb = totalBytes / (1024 * 1024);
+    usageEl.textContent = 'Espace photos utilisé (estimation) : ' + mb.toFixed(1)
+      + ' Mo / 5000 Mo gratuits — ' + allRecipes.length + ' recette' + (allRecipes.length > 1 ? 's' : '')
+      + ', tous comptes confondus.';
+  });
 }
 
 E.$('#admin-btn').addEventListener('click', function () {

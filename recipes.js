@@ -14,7 +14,7 @@ import {
   arrayUnion, arrayRemove, limit,
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 import {
-  ref, uploadBytes, getDownloadURL, deleteObject,
+  ref, uploadBytes, getDownloadURL, deleteObject, getMetadata,
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js';
 
 const RECIPES = collection(db, 'recipes');
@@ -119,11 +119,29 @@ export function recipePhotos(recipe) {
     path: p.path || null,
     thumbUrl: p.thumbUrl || p.url,
     thumbPath: p.thumbPath || null,
-    // Absent sur les photos envoyees avant ce champ : 0, donc sous-estime
-    // legerement l'espace utilise pour ces anciennes photos (approximation
-    // admin uniquement, pas une valeur facturee).
+    // Absent sur les photos envoyees avant ce champ : 0 ici, recalcule a la
+    // volee depuis Storage par fetchLegacyPhotoSize quand necessaire (voir
+    // updateAdminUsage dans app.js).
     sizeBytes: p.sizeBytes || 0,
   }));
+}
+
+// Taille reelle (pleine + miniature) d'une photo envoyee avant l'ajout du
+// champ `sizeBytes` : son document Firestore ne la connait pas, donc on la
+// redemande a Storage. Reserve a l'estimation admin (getMetadata est une
+// lecture, autorisee a l'admin par storage.rules comme la lecture
+// Firestore) ; en best-effort, une photo introuvable compte pour 0 plutot
+// que de faire echouer toute l'estimation.
+export async function fetchLegacyPhotoSize(path, thumbPath) {
+  let total = 0;
+  for (const p of [path, thumbPath]) {
+    if (!p) continue;
+    try {
+      const meta = await getMetadata(ref(storage, p));
+      total += meta.size || 0;
+    } catch (err) { /* photo supprimee entre-temps, ou introuvable : ignore */ }
+  }
+  return total;
 }
 
 // fields : { title, category, prepMinutes, cookMinutes, servings, difficulty,

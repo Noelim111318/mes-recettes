@@ -1,11 +1,19 @@
 rules_version = '2';
 
 // Mes Recettes — chaque utilisatrice ne lit/ecrit que sous son propre
-// dossier (recipes/{uid}/...). Taille plafonnee, type image impose.
+// dossier (recipes/{uid}/...). Taille plafonnee, type image impose. Lecture
+// aussi ouverte a l'admin (meme UID que firestore.rules) : necessaire pour
+// recalculer la taille reelle des photos envoyees avant l'ajout du champ
+// `sizeBytes` (estimation d'espace, ecran admin).
 service firebase.storage {
   match /b/{bucket}/o {
+    function isAdmin() {
+      return request.auth != null && request.auth.uid == 'EwBMsqx4MGXHNHcPlkpb7StazJp2';
+    }
+
     match /recipes/{uid}/{fileName} {
-      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow delete: if request.auth != null && request.auth.uid == uid;
 
       allow write: if request.auth != null && request.auth.uid == uid
         && request.resource.size < 5 * 1024 * 1024
