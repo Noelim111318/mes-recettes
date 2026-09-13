@@ -9,7 +9,7 @@ import {
 import { subscribeToRecipes, saveRecipe, deleteRecipe, recipePhotos } from './recipes.js';
 import { resetLocalPersistence } from './firebase-init.js';
 
-var APP_VERSION = 'v1.3.4';
+var APP_VERSION = 'v1.3.5';
 var E = window.AppEngine;
 var DATA = window.APP_DATA || {};
 

@@ -13,7 +13,7 @@ import {
   initializeFirestore,
   getFirestore,
   persistentLocalCache,
-  persistentMultiTabManager,
+  persistentMultipleTabManager,
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 import { getStorage } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js';
 import { firebaseConfig } from './firebase-config.js';
@@ -54,7 +54,7 @@ export async function resetLocalPersistence() {
 function createFirestore() {
   try {
     return initializeFirestore(app, {
-      localCache: persistentLocalCache({ tabManager: persistentMultiTabManager() }),
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
     });
   } catch (err) {
     console.warn('[firestore] persistence indisponible, repli memoire :', err);
