@@ -7,9 +7,8 @@ import {
   signInWithGoogle, consumeRedirectError,
 } from './auth.js';
 import { subscribeToRecipes, saveRecipe, deleteRecipe, recipePhotos } from './recipes.js';
-import { resetLocalPersistence } from './firebase-init.js';
 
-var APP_VERSION = 'v1.3.5';
+var APP_VERSION = 'v1.3.6';
 var E = window.AppEngine;
 var DATA = window.APP_DATA || {};
 
@@ -583,17 +582,27 @@ E.$('#recipe-form').addEventListener('submit', function (e) {
 });
 
 /* -------------------------------------------------- Recettes (Firestore) */
-// Filet de securite pour un conflit de persistence locale (ex. changement de
-// configuration Firestore d'une version a l'autre) : efface le cache local
-// (sans danger, aucune donnee n'y vit reellement) et recharge une seule fois
-// par session, plutot que de laisser l'app bloquee.
-function recoverFromPersistenceError(err) {
-  if (sessionStorage.getItem('mr-recovered') === '1') {
-    E.announce('Erreur de synchronisation persistante : ' + (err && err.message ? err.message : ''), true);
-    return;
+// Affiche l'erreur a l'ecran (pas seulement via E.announce, invisible pour
+// un public voyant) : une erreur avalee silencieusement est pire qu'un
+// plantage visible, impossible a diagnostiquer a distance.
+function showVisibleError(prefix, err) {
+  var msg = prefix + ' : ' + (err && err.message ? err.message : String(err))
+    + (err && err.code ? ' (' + err.code + ')' : '');
+  console.error(msg, err);
+  var el = document.getElementById('diag-banner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'diag-banner';
+    el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999999;'
+      + 'background:#c0392b;color:#fff;padding:10px;font:12px monospace;'
+      + 'white-space:pre-wrap;max-height:50vh;overflow:auto;';
+    document.body.appendChild(el);
   }
-  sessionStorage.setItem('mr-recovered', '1');
-  resetLocalPersistence().then(function () { location.reload(); });
+  el.textContent += msg + '\n\n';
+  E.announce(msg, true);
+}
+function recoverFromPersistenceError(err) {
+  showVisibleError('Erreur de synchronisation des recettes', err);
 }
 
 function startRecipesSubscription(uid) {
