@@ -13,7 +13,7 @@ import { subscribeToRecipes, subscribeToAllRecipes, saveRecipe, deleteRecipe, re
 // afficher/masquer le bouton cote interface.
 var ADMIN_UID = 'EwBMsqx4MGXHNHcPlkpb7StazJp2';
 
-var APP_VERSION = 'v1.4.0';
+var APP_VERSION = 'v1.4.1';
 var E = window.AppEngine;
 var DATA = window.APP_DATA || {};
 
@@ -36,6 +36,7 @@ E.on('screen:back', function () { E.screens.show('screen-home', { push: false })
 var currentUser = null;
 var currentUserEmail = '';
 var recipes = [];
+var allRecipes = [];  // vue admin uniquement
 var unsubscribeRecipes = null;
 var unsubscribeAllRecipes = null;
 var authMode = 'signin';
@@ -305,14 +306,15 @@ updateOfflineBadge();
 var savedSearch = E.store.load('lastSearch', '');
 if (savedSearch) E.$('#search-input').value = savedSearch;
 
-function updateCategoryOptions() {
-  var select = E.$('#category-filter');
-  var current = select.value;
+// Partages entre la liste perso et la vue admin (memes options de
+// recherche/filtre sur les deux ecrans).
+function buildCategoryOptions(selectEl, list) {
+  var current = selectEl.value;
   // Regroupe sans tenir compte de la casse ("Dessert" et "dessert" comptent
   // pour une seule categorie), en gardant la 1re graphie rencontree.
   var seen = {};
   var cats = [];
-  recipes.forEach(function (r) {
+  list.forEach(function (r) {
     var c = r.category;
     if (!c) return;
     var key = c.toLowerCase();
@@ -320,18 +322,33 @@ function updateCategoryOptions() {
   });
   cats.sort(function (a, b) { return a.localeCompare(b, 'fr'); });
 
-  select.textContent = '';
+  selectEl.textContent = '';
   var allOpt = document.createElement('option');
   allOpt.value = '';
   allOpt.textContent = 'Toutes';
-  select.appendChild(allOpt);
+  selectEl.appendChild(allOpt);
   cats.forEach(function (c) {
     var opt = document.createElement('option');
     opt.value = c;
     opt.textContent = c;
-    select.appendChild(opt);
+    selectEl.appendChild(opt);
   });
-  if (cats.indexOf(current) !== -1) select.value = current;
+  if (cats.indexOf(current) !== -1) selectEl.value = current;
+}
+
+function filterRecipes(list, searchEl, categoryEl) {
+  var search = (searchEl.value || '').trim().toLowerCase();
+  var category = categoryEl.value;
+  var categoryLower = category.toLowerCase();
+  return list.filter(function (r) {
+    var matchSearch = !search || (r.title || '').toLowerCase().indexOf(search) !== -1;
+    var matchCat = !category || (r.category || '').toLowerCase() === categoryLower;
+    return matchSearch && matchCat;
+  });
+}
+
+function updateCategoryOptions() {
+  buildCategoryOptions(E.$('#category-filter'), recipes);
 }
 
 function renderRecipeCard(recipe, returnScreen, showOwner) {
@@ -376,15 +393,7 @@ function renderRecipeCard(recipe, returnScreen, showOwner) {
 function renderList() {
   var list = E.$('#recipe-list');
   var empty = E.$('#empty-state');
-  var search = (E.$('#search-input').value || '').trim().toLowerCase();
-  var category = E.$('#category-filter').value;
-
-  var categoryLower = category.toLowerCase();
-  var filtered = recipes.filter(function (r) {
-    var matchSearch = !search || (r.title || '').toLowerCase().indexOf(search) !== -1;
-    var matchCat = !category || (r.category || '').toLowerCase() === categoryLower;
-    return matchSearch && matchCat;
-  });
+  var filtered = filterRecipes(recipes, E.$('#search-input'), E.$('#category-filter'));
 
   list.textContent = '';
   filtered.forEach(function (r) { list.appendChild(renderRecipeCard(r, 'screen-home', false)); });
@@ -644,24 +653,43 @@ function stopRecipesSubscription() {
 /* ----------------------------------------------------------------- Admin */
 // Abonnement "toutes les recettes" demarre seulement a l'ouverture de
 // l'ecran admin (pas en continu) : evite des lectures Firestore inutiles
-// pour une fonctionnalite rarement utilisee.
-function renderAdminList(list) {
+// pour une fonctionnalite rarement utilisee. Memes options de
+// recherche/filtre que la liste perso (buildCategoryOptions/filterRecipes).
+function renderAdminList() {
   var wrap = E.$('#admin-recipe-list');
   var empty = E.$('#admin-empty-state');
+  var filtered = filterRecipes(allRecipes, E.$('#admin-search-input'), E.$('#admin-category-filter'));
+
   wrap.textContent = '';
-  list.forEach(function (r) { wrap.appendChild(renderRecipeCard(r, 'screen-admin', true)); });
-  empty.hidden = list.length > 0;
-  if (!list.length) empty.textContent = 'Aucune recette, tous comptes confondus.';
+  filtered.forEach(function (r) { wrap.appendChild(renderRecipeCard(r, 'screen-admin', true)); });
+
+  if (filtered.length === 0) {
+    empty.hidden = false;
+    empty.textContent = allRecipes.length === 0
+      ? 'Aucune recette, tous comptes confondus.'
+      : 'Aucune recette ne correspond à ta recherche.';
+  } else {
+    empty.hidden = true;
+  }
 }
 
+E.$('#admin-search-input').addEventListener('input', renderAdminList);
+E.$('#admin-category-filter').addEventListener('change', renderAdminList);
+
 E.$('#admin-btn').addEventListener('click', function () {
-  unsubscribeAllRecipes = subscribeToAllRecipes(renderAdminList, function (err) {
+  E.$('#admin-search-input').value = '';
+  unsubscribeAllRecipes = subscribeToAllRecipes(function (list) {
+    allRecipes = list;
+    buildCategoryOptions(E.$('#admin-category-filter'), allRecipes);
+    renderAdminList();
+  }, function (err) {
     showVisibleError('Erreur de synchronisation (admin)', err);
   });
   E.screens.show('screen-admin', { push: true });
 });
 E.$('#admin-back-btn').addEventListener('click', function () {
   if (unsubscribeAllRecipes) { unsubscribeAllRecipes(); unsubscribeAllRecipes = null; }
+  allRecipes = [];
   E.screens.show('screen-home', { push: true });
 });
 
@@ -722,6 +750,7 @@ watchAuth(function (user) {
     currentUserEmail = '';
     stopRecipesSubscription();
     if (unsubscribeAllRecipes) { unsubscribeAllRecipes(); unsubscribeAllRecipes = null; }
+    allRecipes = [];
     E.$('#auth-form').reset();
     setAuthMode('signin');
     E.screens.show('screen-auth', { push: false });
