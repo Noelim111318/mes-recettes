@@ -8,7 +8,7 @@ import {
 } from './auth.js';
 import { subscribeToRecipes, saveRecipe, deleteRecipe } from './recipes.js';
 
-var APP_VERSION = 'v1.0.1';
+var APP_VERSION = 'v1.0.2';
 var E = window.AppEngine;
 var DATA = window.APP_DATA || {};
 
@@ -41,6 +41,38 @@ var photoFile = null;
 function showError(sel, msg) { var el = E.$(sel); el.textContent = msg; el.hidden = false; }
 function hideError(sel) { var el = E.$(sel); el.hidden = true; el.textContent = ''; }
 
+/* -------------------------------------------------------- Dictee (micro) */
+// Les claviers mobiles ont deja un micro integre, mais il n'est pas garanti
+// actif partout (reglage iOS, etc.) : ce bouton dicte directement dans le
+// champ via l'API Web Speech, quand le navigateur la supporte.
+var SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+function attachMic(input, btn) {
+  if (!input || !btn) return;
+  if (!SpeechRecognitionCtor) { btn.remove(); return; }
+  btn.hidden = false;
+  var recognition = null;
+  var listening = false;
+  btn.addEventListener('click', function () {
+    if (listening) { if (recognition) recognition.stop(); return; }
+    recognition = new SpeechRecognitionCtor();
+    recognition.lang = 'fr-FR';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onstart = function () { listening = true; btn.classList.add('mic-btn--on'); };
+    recognition.onend = function () { listening = false; btn.classList.remove('mic-btn--on'); };
+    recognition.onerror = function () { listening = false; btn.classList.remove('mic-btn--on'); };
+    recognition.onresult = function (e) {
+      var transcript = e.results[0][0].transcript;
+      var sep = input.value && !/\s$/.test(input.value) ? ' ' : '';
+      input.value = input.value ? input.value + sep + transcript : transcript;
+      input.focus();
+    };
+    recognition.start();
+  });
+}
+attachMic(E.$('#field-title'), E.$('#field-title-mic'));
+attachMic(E.$('#field-category'), E.$('#field-category-mic'));
+
 function addDynamicRow(containerEl, placeholder, value) {
   var row = document.createElement('div');
   row.className = 'dynamic-list-row';
@@ -51,6 +83,13 @@ function addDynamicRow(containerEl, placeholder, value) {
   input.placeholder = placeholder;
   input.value = value || '';
 
+  var micBtn = document.createElement('button');
+  micBtn.type = 'button';
+  micBtn.className = 'mic-btn';
+  micBtn.setAttribute('aria-label', 'Dicter cette ligne');
+  micBtn.textContent = '🎤';
+  micBtn.hidden = true;
+
   var removeBtn = document.createElement('button');
   removeBtn.type = 'button';
   removeBtn.className = 'dynamic-list-remove';
@@ -58,8 +97,10 @@ function addDynamicRow(containerEl, placeholder, value) {
   removeBtn.textContent = '×';
 
   row.appendChild(input);
+  row.appendChild(micBtn);
   row.appendChild(removeBtn);
   containerEl.appendChild(row);
+  attachMic(input, micBtn);
   return input;
 }
 
@@ -161,7 +202,7 @@ function updateCategoryOptions() {
   select.textContent = '';
   var allOpt = document.createElement('option');
   allOpt.value = '';
-  allOpt.textContent = 'Toutes les catégories';
+  allOpt.textContent = 'Catégorie';
   select.appendChild(allOpt);
   cats.forEach(function (c) {
     var opt = document.createElement('option');

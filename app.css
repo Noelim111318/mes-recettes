@@ -37,6 +37,11 @@
    finissait par chevaucher le titre ou le bandeau d'installation. */
 .version-badge { position: static; align-self: flex-end; margin-bottom: -4px; }
 
+/* screens.show() deplace le focus sur le titre de l'ecran (utile au lecteur
+   d'ecran) mais l'anneau de focus visible dessus est deroutant pour un clic
+   normal : ce titre n'est pas un element interactif, juste focus par script. */
+h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus { outline: none; }
+
 /* ------------------------------------------------------------ Ecran auth */
 .auth-panel { text-align: center; }
 .auth-panel h1 { font-size: clamp(1.6rem, 5vw, 2.2rem); color: var(--yellow); margin-bottom: 6px; }
@@ -75,6 +80,18 @@
 }
 .form-input::placeholder { color: var(--ink-dim); }
 .form-row { display: flex; gap: 10px; width: 100%; flex-wrap: wrap; }
+.input-with-mic { display: flex; gap: 8px; align-items: center; }
+.input-with-mic .form-input { flex: 1; }
+.mic-btn {
+  flex: 0 0 auto;
+  width: 34px; height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--card-border);
+  background: none;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.mic-btn--on { background: var(--red); border-color: var(--red); }
 .form-row .form-field { flex: 1 1 120px; }
 .form-error {
   color: var(--red);
