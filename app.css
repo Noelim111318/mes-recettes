@@ -44,8 +44,7 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus { outl
 
 /* ------------------------------------------------------------ Ecran auth */
 .auth-panel { text-align: center; }
-.auth-panel h1 { font-size: clamp(1.6rem, 5vw, 2.2rem); color: var(--yellow); margin-bottom: 6px; }
-.auth-sub { color: var(--ink-soft); font-size: 0.92rem; margin-bottom: 18px; }
+.auth-panel h1 { font-size: clamp(1.6rem, 5vw, 2.2rem); color: var(--yellow); margin-bottom: 20px; }
 .auth-form { display: flex; flex-direction: column; gap: 14px; text-align: left; }
 .auth-links { display: flex; flex-direction: column; gap: 4px; margin-top: 14px; align-items: center; }
 

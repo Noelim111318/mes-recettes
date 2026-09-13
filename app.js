@@ -7,8 +7,9 @@ import {
   signInWithGoogle, consumeRedirectError,
 } from './auth.js';
 import { subscribeToRecipes, saveRecipe, deleteRecipe, recipePhotos } from './recipes.js';
+import { resetLocalPersistence } from './firebase-init.js';
 
-var APP_VERSION = 'v1.3.1';
+var APP_VERSION = 'v1.3.2';
 var E = window.AppEngine;
 var DATA = window.APP_DATA || {};
 
@@ -582,15 +583,32 @@ E.$('#recipe-form').addEventListener('submit', function (e) {
 });
 
 /* -------------------------------------------------- Recettes (Firestore) */
+// Filet de securite pour un conflit de persistence locale (ex. changement de
+// configuration Firestore d'une version a l'autre) : efface le cache local
+// (sans danger, aucune donnee n'y vit reellement) et recharge une seule fois
+// par session, plutot que de laisser l'app bloquee.
+function recoverFromPersistenceError(err) {
+  if (sessionStorage.getItem('mr-recovered') === '1') {
+    E.announce('Erreur de synchronisation persistante : ' + (err && err.message ? err.message : ''), true);
+    return;
+  }
+  sessionStorage.setItem('mr-recovered', '1');
+  resetLocalPersistence().then(function () { location.reload(); });
+}
+
 function startRecipesSubscription(uid) {
   stopRecipesSubscription();
-  unsubscribeRecipes = subscribeToRecipes(uid, function (list) {
-    recipes = list;
-    updateCategoryOptions();
-    renderList();
-  }, function (err) {
-    E.announce('Erreur de synchronisation : ' + (err && err.message ? err.message : 'réessaie plus tard.'), true);
-  });
+  try {
+    unsubscribeRecipes = subscribeToRecipes(uid, function (list) {
+      recipes = list;
+      updateCategoryOptions();
+      renderList();
+    }, function (err) {
+      recoverFromPersistenceError(err);
+    });
+  } catch (err) {
+    recoverFromPersistenceError(err);
+  }
 }
 function stopRecipesSubscription() {
   if (unsubscribeRecipes) { unsubscribeRecipes(); unsubscribeRecipes = null; }
@@ -642,8 +660,11 @@ consumeRedirectError().then(function (err) {
 watchAuth(function (user) {
   if (user) {
     currentUser = user.uid;
-    startRecipesSubscription(currentUser);
+    // L'ecran d'accueil s'affiche dans tous les cas : une erreur Firestore
+    // (ex. conflit de persistence locale, gere dans startRecipesSubscription)
+    // ne doit jamais bloquer la transition post-connexion.
     E.screens.show('screen-home', { push: false });
+    startRecipesSubscription(currentUser);
   } else {
     currentUser = null;
     stopRecipesSubscription();
