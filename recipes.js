@@ -70,38 +70,43 @@ export function recipePhotos(recipe) {
 
 // fields : { title, category, prepMinutes, cookMinutes, servings, difficulty,
 //            budget, season, diets, conservationDays, note, ingredients,
-//            steps, photos }  — `photos` = les photos conservees (deja
-// existantes, moins celles retirees dans le formulaire).
-// newPhotoFiles : File[], nouvelles photos a uploader et ajouter.
+//            steps }.
+// orderedPhotos : dans l'ordre d'affichage voulu (le 1er = couverture) —
+// { kept: {url,path,thumbUrl,thumbPath} } pour une photo deja envoyee, ou
+// { file: File } pour une nouvelle a uploader. L'ordre est preserve dans le
+// document final : une nouvelle photo peut devenir couverture meme s'il y a
+// deja des photos existantes.
 // removedPhotos : { path, thumbPath }[], photos retirees (supprimees du
 // Storage apres l'ecriture reussie du document).
-export async function saveRecipe(ownerId, recipeId, fields, newPhotoFiles, removedPhotos) {
-  const photos = (fields.photos || []).slice();
+export async function saveRecipe(ownerId, recipeId, fields, orderedPhotos, removedPhotos) {
+  const photos = [];
   let photoError = null;
+  const online = navigator.onLine;
 
-  if (newPhotoFiles && newPhotoFiles.length) {
-    if (!navigator.onLine) {
-      photoError = new Error('offline');
-    } else {
-      for (const file of newPhotoFiles) {
-        try {
-          const [fullBlob, thumbBlob] = await resizeImageVariants(file, [
-            { maxDim: MAX_DIM, quality: JPEG_QUALITY },
-            { maxDim: THUMB_DIM, quality: THUMB_QUALITY },
-          ]);
-          const id = randomId();
-          const path = `recipes/${ownerId}/${id}.jpg`;
-          const thumbPath = `recipes/${ownerId}/${id}-thumb.jpg`;
-          await uploadBytes(ref(storage, path), fullBlob, { contentType: 'image/jpeg' });
-          await uploadBytes(ref(storage, thumbPath), thumbBlob, { contentType: 'image/jpeg' });
-          const url = await getDownloadURL(ref(storage, path));
-          const thumbUrl = await getDownloadURL(ref(storage, thumbPath));
-          photos.push({ url, path, thumbUrl, thumbPath });
-        } catch (err) {
-          photoError = err; // on garde ce qui a deja ete envoye avant l'echec
-          break;
-        }
-      }
+  for (const item of (orderedPhotos || [])) {
+    if (item.kept) {
+      photos.push(item.kept);
+      continue;
+    }
+    if (!online) {
+      if (!photoError) photoError = new Error('offline');
+      continue;
+    }
+    try {
+      const [fullBlob, thumbBlob] = await resizeImageVariants(item.file, [
+        { maxDim: MAX_DIM, quality: JPEG_QUALITY },
+        { maxDim: THUMB_DIM, quality: THUMB_QUALITY },
+      ]);
+      const id = randomId();
+      const path = `recipes/${ownerId}/${id}.jpg`;
+      const thumbPath = `recipes/${ownerId}/${id}-thumb.jpg`;
+      await uploadBytes(ref(storage, path), fullBlob, { contentType: 'image/jpeg' });
+      await uploadBytes(ref(storage, thumbPath), thumbBlob, { contentType: 'image/jpeg' });
+      const url = await getDownloadURL(ref(storage, path));
+      const thumbUrl = await getDownloadURL(ref(storage, thumbPath));
+      photos.push({ url, path, thumbUrl, thumbPath });
+    } catch (err) {
+      if (!photoError) photoError = err; // on garde ce qui a deja ete envoye avant l'echec
     }
   }
 

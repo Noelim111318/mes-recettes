@@ -13,7 +13,7 @@ import { subscribeToRecipes, subscribeToAllRecipes, saveRecipe, deleteRecipe, re
 // afficher/masquer le bouton cote interface.
 var ADMIN_UID = 'EwBMsqx4MGXHNHcPlkpb7StazJp2';
 
-var APP_VERSION = 'v1.4.2';
+var APP_VERSION = 'v1.5.0';
 var E = window.AppEngine;
 var DATA = window.APP_DATA || {};
 
@@ -44,8 +44,10 @@ var editingRecipe = null;
 var viewingRecipe = null;
 var formReturnScreen = 'screen-home';
 var detailReturnScreen = 'screen-home';
-var newPhotoFiles = [];       // File[] nouvellement choisis, pas encore uploades
-var keptPhotos = [];          // photos existantes conservees ({url, path}[])
+// Photos du formulaire, dans l'ordre d'affichage voulu (la 1re = couverture) :
+// { kept: {url,path,thumbUrl,thumbPath} } pour une photo deja envoyee, ou
+// { file: File } pour une nouvelle, pas encore uploadee.
+var photoItems = [];
 var removedPhotos = [];       // photos retirees ({path, thumbPath}[])
 
 /* --------------------------------------------------------- Utilitaires */
@@ -488,48 +490,74 @@ E.$('#detail-delete-btn').addEventListener('click', function () {
 });
 
 /* ------------------------------------------------------------ Formulaire */
+// La 1re photo de photoItems sert de couverture (carte de la liste). Un clic
+// sur l'etoile d'une autre photo la fait passer en tete. Delegation sur le
+// conteneur (comme les listes ingredients/etapes) : l'index se lit sur la
+// position DOM au moment du clic, pas besoin de le figer a la creation.
 function renderPhotoGallery() {
   var wrap = E.$('#photo-gallery');
   wrap.textContent = '';
-
-  keptPhotos.forEach(function (p, idx) {
-    wrap.appendChild(photoThumb(p.thumbUrl, function () {
-      removedPhotos.push({ path: p.path, thumbPath: p.thumbPath });
-      keptPhotos.splice(idx, 1);
-      renderPhotoGallery();
-    }));
-  });
-  newPhotoFiles.forEach(function (file, idx) {
-    wrap.appendChild(photoThumb(URL.createObjectURL(file), function () {
-      newPhotoFiles.splice(idx, 1);
-      renderPhotoGallery();
-    }));
+  photoItems.forEach(function (item, idx) {
+    var src = item.kept ? item.kept.thumbUrl : URL.createObjectURL(item.file);
+    wrap.appendChild(photoThumb(src, idx === 0));
   });
 }
 
-function photoThumb(src, onRemove) {
+function photoThumb(src, isCover) {
   var box = document.createElement('div');
-  box.className = 'photo-thumb';
+  box.className = 'photo-thumb' + (isCover ? ' photo-thumb--cover' : '');
   var img = document.createElement('img');
   img.src = src;
   img.alt = '';
+  box.appendChild(img);
+
+  if (isCover) {
+    var badge = document.createElement('span');
+    badge.className = 'photo-thumb-badge';
+    badge.textContent = 'Couverture';
+    box.appendChild(badge);
+  } else {
+    var star = document.createElement('button');
+    star.type = 'button';
+    star.className = 'photo-thumb-cover-btn';
+    star.setAttribute('aria-label', 'Définir comme couverture');
+    star.textContent = '★';
+    box.appendChild(star);
+  }
+
   var rm = document.createElement('button');
   rm.type = 'button';
   rm.className = 'photo-thumb-remove';
   rm.setAttribute('aria-label', 'Retirer cette photo');
   rm.textContent = '×';
-  rm.addEventListener('click', onRemove);
-  box.appendChild(img);
   box.appendChild(rm);
+
   return box;
 }
+
+E.$('#photo-gallery').addEventListener('click', function (e) {
+  var wrap = E.$('#photo-gallery');
+  var box = e.target.closest('.photo-thumb');
+  if (!box) return;
+  var idx = Array.prototype.indexOf.call(wrap.children, box);
+  if (idx === -1) return;
+
+  if (e.target.closest('.photo-thumb-cover-btn')) {
+    var item = photoItems.splice(idx, 1)[0];
+    photoItems.unshift(item);
+    renderPhotoGallery();
+  } else if (e.target.closest('.photo-thumb-remove')) {
+    var removed = photoItems.splice(idx, 1)[0];
+    if (removed.kept) removedPhotos.push({ path: removed.kept.path, thumbPath: removed.kept.thumbPath });
+    renderPhotoGallery();
+  }
+});
 
 function openForm(recipe, returnScreen) {
   editingRecipe = recipe || null;
   formReturnScreen = returnScreen || 'screen-home';
-  newPhotoFiles = [];
   removedPhotos = [];
-  keptPhotos = editingRecipe ? recipePhotos(editingRecipe).slice() : [];
+  photoItems = editingRecipe ? recipePhotos(editingRecipe).map(function (p) { return { kept: p }; }) : [];
 
   E.$('#form-title').textContent = editingRecipe ? 'Modifier la recette' : 'Nouvelle recette';
   E.$('#field-title').value = editingRecipe ? editingRecipe.title : '';
@@ -555,7 +583,7 @@ function openForm(recipe, returnScreen) {
 
 E.$('#field-photo').addEventListener('change', function (e) {
   var files = Array.prototype.slice.call(e.target.files || []);
-  newPhotoFiles = newPhotoFiles.concat(files);
+  files.forEach(function (f) { photoItems.push({ file: f }); });
   e.target.value = ''; // permet de re-choisir le meme fichier plus tard
   renderPhotoGallery();
 });
@@ -591,13 +619,12 @@ E.$('#recipe-form').addEventListener('submit', function (e) {
     note: E.$('#field-note').value.trim(),
     ingredients: ingredients,
     steps: steps,
-    photos: keptPhotos,
   };
 
   var submitBtn = E.$('#form-submit-btn');
   submitBtn.disabled = true;
 
-  saveRecipe(currentUser, editingRecipe ? editingRecipe.id : null, fields, newPhotoFiles, removedPhotos)
+  saveRecipe(currentUser, editingRecipe ? editingRecipe.id : null, fields, photoItems, removedPhotos)
     .then(function (result) {
       submitBtn.disabled = false;
       if (result.photoError) {

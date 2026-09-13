@@ -164,6 +164,7 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus { outl
   overflow: hidden;
   border: 1px solid var(--card-border);
 }
+.photo-thumb--cover { border: 2px solid var(--yellow); }
 .photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .photo-thumb-remove {
   position: absolute; top: 3px; right: 3px;
@@ -175,6 +176,25 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus { outl
   font-size: 0.85rem;
   line-height: 1;
   cursor: pointer;
+}
+.photo-thumb-cover-btn {
+  position: absolute; top: 3px; left: 3px;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.photo-thumb-cover-btn:hover { background: rgba(0, 0, 0, 0.75); color: var(--yellow); }
+.photo-thumb-badge {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: color-mix(in srgb, var(--yellow) 85%, black);
+  color: var(--bg);
+  font-size: 0.6rem; font-weight: 800; text-align: center;
+  padding: 2px 0;
 }
 
 /* --------------------------------------------------------------- Topbar */
