@@ -8,7 +8,7 @@ import {
 } from './auth.js';
 import { subscribeToRecipes, saveRecipe, deleteRecipe, recipePhotos } from './recipes.js';
 
-var APP_VERSION = 'v1.2.0';
+var APP_VERSION = 'v1.2.1';
 var E = window.AppEngine;
 var DATA = window.APP_DATA || {};
 
@@ -37,7 +37,7 @@ var viewingRecipe = null;
 var formReturnScreen = 'screen-home';
 var newPhotoFiles = [];       // File[] nouvellement choisis, pas encore uploades
 var keptPhotos = [];          // photos existantes conservees ({url, path}[])
-var removedPhotoPaths = [];   // chemins Storage des photos retirees
+var removedPhotos = [];       // photos retirees ({path, thumbPath}[])
 
 /* --------------------------------------------------------- Utilitaires */
 function showError(sel, msg) { var el = E.$(sel); el.textContent = msg; el.hidden = false; }
@@ -45,6 +45,60 @@ function hideError(sel) { var el = E.$(sel); el.hidden = true; el.textContent = 
 function normalizeCategory(s) {
   s = (s || '').trim();
   return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : '';
+}
+
+/* ----------------------------------------------- Nombres en toutes lettres */
+// La reconnaissance vocale transcrit "trois oeufs" tel quel au lieu de
+// "3 oeufs" : on convertit les nombres ecrits en toutes lettres (0-99, plus
+// les centaines) en chiffres apres la dictee. Couvre les quantites d'une
+// recette ; pas d'ambition de parser le francais au-dela de ca.
+function buildFrNumberMap() {
+  var units = ['zéro', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf',
+    'dix', 'onze', 'douze', 'treize', 'quatorze', 'quinze', 'seize'];
+  var map = { une: 1 };
+  units.forEach(function (w, i) { map[w] = i; });
+  map['dix-sept'] = 17; map['dix-huit'] = 18; map['dix-neuf'] = 19;
+
+  function teenWord(n) {
+    if (n <= 16) return units[n];
+    return n === 17 ? 'dix-sept' : n === 18 ? 'dix-huit' : 'dix-neuf';
+  }
+
+  [['vingt', 20], ['trente', 30], ['quarante', 40], ['cinquante', 50], ['soixante', 60]].forEach(function (t) {
+    map[t[0]] = t[1];
+    for (var u = 1; u <= 9; u++) map[t[0] + (u === 1 ? '-et-un' : '-' + units[u])] = t[1] + u;
+  });
+  map['soixante-dix'] = 70;
+  map['soixante-et-onze'] = 71;
+  for (var n1 = 72; n1 <= 79; n1++) map['soixante-' + teenWord(n1 - 60)] = n1;
+  map['quatre-vingts'] = 80;
+  map['quatre-vingt'] = 80;
+  for (var n2 = 81; n2 <= 89; n2++) map['quatre-vingt-' + units[n2 - 80]] = n2;
+  for (var n3 = 90; n3 <= 99; n3++) map['quatre-vingt-' + teenWord(n3 - 80)] = n3;
+  return map;
+}
+var FR_NUMBER_MAP = buildFrNumberMap();
+var FR_NUMBER_KEYS = Object.keys(FR_NUMBER_MAP).sort(function (a, b) {
+  return b.split(/[\s-]+/).length - a.split(/[\s-]+/).length || b.length - a.length;
+});
+// Chaque mot-cle peut apparaitre tel quel (trait d'union) ou avec des
+// espaces (la reconnaissance vocale ne met pas toujours les traits d'union).
+var FR_NUMBER_RE = new RegExp('\\b(' + FR_NUMBER_KEYS.map(function (k) {
+  return k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/-/g, '[- ]');
+}).join('|') + ')\\b', 'gi');
+
+function frNumbersToDigits(text) {
+  var out = text.replace(FR_NUMBER_RE, function (m) {
+    var key = m.toLowerCase().replace(/\s+/g, '-');
+    return FR_NUMBER_MAP.hasOwnProperty(key) ? String(FR_NUMBER_MAP[key]) : m;
+  });
+  // Centaines : "trois cents", "cent cinquante", "cent" seul...
+  out = out.replace(/\b(\d+\s+)?cents?\b(\s+\d+)?/gi, function (m, prefix, suffix) {
+    var hundreds = prefix ? parseInt(prefix, 10) : 1;
+    var rest = suffix ? parseInt(suffix, 10) : 0;
+    return String(hundreds * 100 + rest);
+  });
+  return out;
 }
 
 /* -------------------------------------------------------- Dictee (micro) */
@@ -68,7 +122,7 @@ function attachMic(input, btn) {
     recognition.onend = function () { listening = false; btn.classList.remove('mic-btn--on'); };
     recognition.onerror = function () { listening = false; btn.classList.remove('mic-btn--on'); };
     recognition.onresult = function (e) {
-      var transcript = e.results[0][0].transcript;
+      var transcript = frNumbersToDigits(e.results[0][0].transcript);
       var sep = input.value && !/\s$/.test(input.value) ? ' ' : '';
       input.value = input.value ? input.value + sep + transcript : transcript;
       // Pas de input.focus() ici : ça rouvrirait le clavier juste apres avoir dicte.
@@ -281,7 +335,7 @@ function renderRecipeCard(recipe) {
   if (photos.length) {
     var img = document.createElement('img');
     img.className = 'recipe-card-photo';
-    img.src = photos[0].url;
+    img.src = photos[0].thumbUrl;
     img.alt = '';
     img.loading = 'lazy';
     card.appendChild(img);
@@ -390,6 +444,7 @@ E.$('#detail-delete-btn').addEventListener('click', function () {
   deleteRecipe(viewingRecipe.id, recipePhotos(viewingRecipe))
     .then(function () {
       E.announce('Recette supprimée.');
+      renderList();
       E.screens.show('screen-home', { push: true });
     })
     .catch(function (err) {
@@ -403,8 +458,8 @@ function renderPhotoGallery() {
   wrap.textContent = '';
 
   keptPhotos.forEach(function (p, idx) {
-    wrap.appendChild(photoThumb(p.url, function () {
-      removedPhotoPaths.push(p.path);
+    wrap.appendChild(photoThumb(p.thumbUrl, function () {
+      removedPhotos.push({ path: p.path, thumbPath: p.thumbPath });
       keptPhotos.splice(idx, 1);
       renderPhotoGallery();
     }));
@@ -438,7 +493,7 @@ function openForm(recipe, returnScreen) {
   editingRecipe = recipe || null;
   formReturnScreen = returnScreen || 'screen-home';
   newPhotoFiles = [];
-  removedPhotoPaths = [];
+  removedPhotos = [];
   keptPhotos = editingRecipe ? recipePhotos(editingRecipe).slice() : [];
 
   E.$('#form-title').textContent = editingRecipe ? 'Modifier la recette' : 'Nouvelle recette';
@@ -506,7 +561,7 @@ E.$('#recipe-form').addEventListener('submit', function (e) {
   var submitBtn = E.$('#form-submit-btn');
   submitBtn.disabled = true;
 
-  saveRecipe(currentUser, editingRecipe ? editingRecipe.id : null, fields, newPhotoFiles, removedPhotoPaths)
+  saveRecipe(currentUser, editingRecipe ? editingRecipe.id : null, fields, newPhotoFiles, removedPhotos)
     .then(function (result) {
       submitBtn.disabled = false;
       if (result.photoError) {
@@ -514,6 +569,7 @@ E.$('#recipe-form').addEventListener('submit', function (e) {
       } else {
         E.announce('Recette enregistrée.');
       }
+      renderList();
       E.screens.show('screen-home', { push: true });
     })
     .catch(function (err) {

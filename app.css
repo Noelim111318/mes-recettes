@@ -248,6 +248,7 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus { outl
   scroll-snap-align: start;
 }
 #screen-detail h2 { font-size: 1.5rem; color: var(--yellow); margin-bottom: 8px; }
+.form-required-hint { font-size: 0.78rem; color: var(--ink-dim); margin-top: -8px; }
 .detail-heading {
   font-size: 0.85rem; font-weight: 800; color: var(--blue);
   text-transform: uppercase; letter-spacing: 0.5px;

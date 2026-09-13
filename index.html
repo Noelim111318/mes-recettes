@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Mes Recettes</title>
   <meta name="description" content="Mes Recettes — PWA installable, fonctionne hors-ligne.">
-  <meta name="app-version" content="v1.2.0">
+  <meta name="app-version" content="v1.2.1">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#2B1B12">
   <meta name="mobile-web-app-capable" content="yes">
@@ -24,7 +24,7 @@
 <a class="skip-link" href="#main">Aller au contenu</a>
 
 <main class="container" id="main">
-  <div class="version-badge" id="app-version">v1.2.0</div>
+  <div class="version-badge" id="app-version">v1.2.1</div>
 
   <div class="install-row" id="install-row" hidden>
     <button class="install-btn" id="install-btn" type="button" aria-label="Installer l'application">📲 Installer l'appli</button>
@@ -86,9 +86,10 @@
   <div class="screen" id="screen-form">
     <div class="panel">
       <h2 id="form-title">Nouvelle recette</h2>
+      <p class="form-required-hint">* champ obligatoire</p>
       <form id="recipe-form" novalidate>
         <label class="form-field">
-          <span class="form-label">Titre</span>
+          <span class="form-label">Titre *</span>
           <div class="input-with-mic">
             <input class="form-input" type="text" id="field-title" required>
             <button class="mic-btn" type="button" id="field-title-mic" aria-label="Dicter le titre" hidden>🎤</button>
@@ -120,7 +121,7 @@
         </div>
 
         <div class="form-row">
-          <div class="form-field form-field--narrow">
+          <div class="form-field">
             <span class="form-label">Difficulté</span>
             <div class="rating" id="field-difficulty" data-value="0">
               <button class="rating-btn" type="button" data-val="1">★</button>
@@ -130,7 +131,7 @@
               <button class="rating-btn" type="button" data-val="5">★</button>
             </div>
           </div>
-          <div class="form-field form-field--narrow">
+          <div class="form-field">
             <span class="form-label">Budget</span>
             <div class="rating" id="field-budget" data-value="0">
               <button class="rating-btn" type="button" data-val="1">€</button>
@@ -170,19 +171,19 @@
         </div>
 
         <div class="form-field">
-          <span class="form-label">Photos (optionnel)</span>
+          <span class="form-label">Photos</span>
           <input class="form-input" type="file" id="field-photo" accept="image/*" multiple>
           <div class="photo-gallery" id="photo-gallery"></div>
         </div>
 
         <div class="form-field">
-          <span class="form-label">Ingrédients</span>
+          <span class="form-label">Ingrédients *</span>
           <div class="dynamic-list" id="ingredients-list"></div>
           <button class="btn btn--ghost" type="button" id="add-ingredient-btn">+ Ajouter un ingrédient</button>
         </div>
 
         <div class="form-field">
-          <span class="form-label">Étapes</span>
+          <span class="form-label">Étapes *</span>
           <div class="dynamic-list" id="steps-list"></div>
           <button class="btn btn--ghost" type="button" id="add-step-btn">+ Ajouter une étape</button>
         </div>

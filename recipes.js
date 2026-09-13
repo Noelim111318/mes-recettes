@@ -18,6 +18,11 @@ import {
 const RECIPES = collection(db, 'recipes');
 const MAX_DIM = 1600;
 const JPEG_QUALITY = 0.82;
+// Miniature dediee (cartes de la liste, galerie du formulaire) : bien plus
+// legere que la photo pleine taille, pour ne pas la telecharger juste pour
+// l'afficher en 88px de cote.
+const THUMB_DIM = 320;
+const THUMB_QUALITY = 0.6;
 
 export function subscribeToRecipes(ownerId, onChange, onError) {
   const q = query(RECIPES, where('ownerId', '==', ownerId), orderBy('updatedAt', 'desc'));
@@ -28,12 +33,20 @@ export function subscribeToRecipes(ownerId, onChange, onError) {
   }, onError);
 }
 
-// Ancien format (v1.1.0 et avant) : une seule photo dans photoUrl/photoPath.
-// Convertit a la volee vers le format tableau, sans migration Firestore.
+// Ancien format (v1.1.0 et avant, ou photos envoyees avant l'ajout des
+// miniatures) : normalise vers { url, path, thumbUrl, thumbPath }, avec la
+// photo pleine taille en repli si aucune miniature dediee n'existe.
 export function recipePhotos(recipe) {
-  if (recipe.photos) return recipe.photos;
-  if (recipe.photoUrl) return [{ url: recipe.photoUrl, path: recipe.photoPath || null }];
-  return [];
+  let list;
+  if (recipe.photos) list = recipe.photos;
+  else if (recipe.photoUrl) list = [{ url: recipe.photoUrl, path: recipe.photoPath || null }];
+  else list = [];
+  return list.map((p) => ({
+    url: p.url,
+    path: p.path || null,
+    thumbUrl: p.thumbUrl || p.url,
+    thumbPath: p.thumbPath || null,
+  }));
 }
 
 // fields : { title, category, prepMinutes, cookMinutes, servings, difficulty,
@@ -41,9 +54,9 @@ export function recipePhotos(recipe) {
 //            steps, photos }  — `photos` = les photos conservees (deja
 // existantes, moins celles retirees dans le formulaire).
 // newPhotoFiles : File[], nouvelles photos a uploader et ajouter.
-// removedPhotoPaths : string[], chemins Storage des photos retirees (a
-// supprimer apres l'ecriture reussie du document).
-export async function saveRecipe(ownerId, recipeId, fields, newPhotoFiles, removedPhotoPaths) {
+// removedPhotos : { path, thumbPath }[], photos retirees (supprimees du
+// Storage apres l'ecriture reussie du document).
+export async function saveRecipe(ownerId, recipeId, fields, newPhotoFiles, removedPhotos) {
   const photos = (fields.photos || []).slice();
   let photoError = null;
 
@@ -53,12 +66,18 @@ export async function saveRecipe(ownerId, recipeId, fields, newPhotoFiles, remov
     } else {
       for (const file of newPhotoFiles) {
         try {
-          const blob = await resizeImage(file, MAX_DIM, JPEG_QUALITY);
-          const path = `recipes/${ownerId}/${randomId()}.jpg`;
-          const fileRef = ref(storage, path);
-          await uploadBytes(fileRef, blob, { contentType: 'image/jpeg' });
-          const url = await getDownloadURL(fileRef);
-          photos.push({ url, path });
+          const [fullBlob, thumbBlob] = await resizeImageVariants(file, [
+            { maxDim: MAX_DIM, quality: JPEG_QUALITY },
+            { maxDim: THUMB_DIM, quality: THUMB_QUALITY },
+          ]);
+          const id = randomId();
+          const path = `recipes/${ownerId}/${id}.jpg`;
+          const thumbPath = `recipes/${ownerId}/${id}-thumb.jpg`;
+          await uploadBytes(ref(storage, path), fullBlob, { contentType: 'image/jpeg' });
+          await uploadBytes(ref(storage, thumbPath), thumbBlob, { contentType: 'image/jpeg' });
+          const url = await getDownloadURL(ref(storage, path));
+          const thumbUrl = await getDownloadURL(ref(storage, thumbPath));
+          photos.push({ url, path, thumbUrl, thumbPath });
         } catch (err) {
           photoError = err; // on garde ce qui a deja ete envoye avant l'echec
           break;
@@ -101,7 +120,10 @@ export async function saveRecipe(ownerId, recipeId, fields, newPhotoFiles, remov
     id = created.id;
   }
 
-  (removedPhotoPaths || []).forEach((p) => { if (p) deleteObject(ref(storage, p)).catch(() => {}); });
+  (removedPhotos || []).forEach((p) => {
+    if (p.path) deleteObject(ref(storage, p.path)).catch(() => {});
+    if (p.thumbPath) deleteObject(ref(storage, p.thumbPath)).catch(() => {});
+  });
 
   return { id, photoError };
 }
@@ -110,6 +132,7 @@ export async function deleteRecipe(recipeId, photos) {
   await deleteDoc(doc(db, 'recipes', recipeId));
   (photos || []).forEach((p) => {
     if (p && p.path) deleteObject(ref(storage, p.path)).catch(() => {});
+    if (p && p.thumbPath) deleteObject(ref(storage, p.thumbPath)).catch(() => {});
   });
 }
 
@@ -117,31 +140,41 @@ function randomId() {
   return (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(16).slice(2));
 }
 
-// Redimensionne + recompresse cote client avant upload : photos de bonne
-// qualite sans gonfler inutilement le stockage / la bande passante.
-function resizeImage(file, maxDim, quality) {
+function loadImage(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
-    img.onload = () => {
-      let { width, height } = img;
-      if (width > maxDim || height > maxDim) {
-        const scale = maxDim / Math.max(width, height);
-        width = Math.round(width * scale);
-        height = Math.round(height * scale);
-      }
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-      URL.revokeObjectURL(url);
-      canvas.toBlob(
-        (blob) => (blob ? resolve(blob) : reject(new Error('toBlob a echoue'))),
-        'image/jpeg',
-        quality
-      );
-    };
+    img.onload = () => resolve({ img, url });
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image illisible')); };
     img.src = url;
   });
+}
+
+function drawToBlob(img, maxDim, quality) {
+  let { width, height } = img;
+  if (width > maxDim || height > maxDim) {
+    const scale = maxDim / Math.max(width, height);
+    width = Math.round(width * scale);
+    height = Math.round(height * scale);
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('toBlob a echoue'))), 'image/jpeg', quality);
+  });
+}
+
+// Decode l'image une seule fois, en tire plusieurs variantes (pleine taille +
+// miniature) : evite de redecoder le fichier source pour chaque taille.
+async function resizeImageVariants(file, variants) {
+  const { img, url } = await loadImage(file);
+  try {
+    const blobs = [];
+    for (const v of variants) blobs.push(await drawToBlob(img, v.maxDim, v.quality));
+    return blobs;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
