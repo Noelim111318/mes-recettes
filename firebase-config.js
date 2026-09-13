@@ -10,10 +10,11 @@
  * config affiché). Colle l'objet tel quel à la place de celui-ci.
  */
 export const firebaseConfig = {
-  apiKey: '__FIREBASE_API_KEY__',
-  authDomain: '__FIREBASE_PROJECT_ID__.firebaseapp.com',
-  projectId: '__FIREBASE_PROJECT_ID__',
-  storageBucket: '__FIREBASE_STORAGE_BUCKET__',
-  messagingSenderId: '__FIREBASE_SENDER_ID__',
-  appId: '__FIREBASE_APP_ID__',
+  apiKey: 'AIzaSyDewBKNIa4Avvb1SCS52OCMrOafOvAQ8J0',
+  authDomain: 'mes-recettes-aea4e.firebaseapp.com',
+  projectId: 'mes-recettes-aea4e',
+  storageBucket: 'mes-recettes-aea4e.firebasestorage.app',
+  messagingSenderId: '901184916298',
+  appId: '1:901184916298:web:6a9f38e0145c01f7614fb3',
+  measurementId: 'G-NN7TNTFZGX',
 };

@@ -39,6 +39,23 @@
 .auth-form { display: flex; flex-direction: column; gap: 14px; text-align: left; }
 .auth-links { display: flex; flex-direction: column; gap: 4px; margin-top: 14px; align-items: center; }
 
+.auth-divider {
+  display: flex; align-items: center; gap: 10px;
+  margin: 16px 0 12px;
+  color: var(--ink-dim); font-size: 0.78rem; font-weight: 700;
+}
+.auth-divider::before, .auth-divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--card-border);
+}
+.btn--google {
+  width: 100%;
+  background: var(--ink);
+  color: #1F1F1F;
+  border: 1px solid var(--card-border);
+  font-weight: 700;
+}
+.btn--google:active { transform: scale(0.98); }
+
 /* --------------------------------------------------------------- Champs */
 .form-field { display: flex; flex-direction: column; gap: 6px; width: 100%; }
 .form-field--narrow { max-width: 110px; }

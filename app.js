@@ -2,7 +2,10 @@
  * La coque PWA (service worker, bandeau installer, ecrans, a11y) vient
  * d'AppEngine (engine/engine.js). Ici : cablage des 4 ecrans + Firebase.
  */
-import { watchAuth, signUp, signIn, logOut, resetPassword, authErrorMessage } from './auth.js';
+import {
+  watchAuth, signUp, signIn, logOut, resetPassword, authErrorMessage,
+  signInWithGoogle, consumeRedirectError,
+} from './auth.js';
 import { subscribeToRecipes, saveRecipe, deleteRecipe } from './recipes.js';
 
 var APP_VERSION = 'v1.0.0';
@@ -389,6 +392,11 @@ E.$('#auth-toggle').addEventListener('click', function () {
   setAuthMode(authMode === 'signup' ? 'signin' : 'signup');
 });
 
+E.$('#auth-google-btn').addEventListener('click', function () {
+  hideError('#auth-error');
+  signInWithGoogle().catch(function (err) { showError('#auth-error', authErrorMessage(err)); });
+});
+
 E.$('#auth-forgot').addEventListener('click', function () {
   var email = E.$('#auth-email').value.trim();
   if (!email) { showError('#auth-error', 'Renseigne ton e-mail puis clique à nouveau.'); return; }
@@ -409,6 +417,10 @@ E.$('#auth-form').addEventListener('submit', function (e) {
   action
     .catch(function (err) { showError('#auth-error', authErrorMessage(err)); })
     .then(function () { submitBtn.disabled = false; });
+});
+
+consumeRedirectError().then(function (err) {
+  if (err) showError('#auth-error', authErrorMessage(err));
 });
 
 watchAuth(function (user) {

@@ -1,4 +1,4 @@
-/* Mes Recettes — authentification (email/mot de passe). */
+/* Mes Recettes — authentification (email/mot de passe + Google). */
 import { auth } from './firebase-init.js';
 import {
   onAuthStateChanged,
@@ -6,7 +6,12 @@ import {
   signInWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
+  GoogleAuthProvider,
+  signInWithRedirect,
+  getRedirectResult,
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
+
+const googleProvider = new GoogleAuthProvider();
 
 const ERROR_MESSAGES = {
   'auth/email-already-in-use': 'Cet e-mail est déjà utilisé.',
@@ -17,6 +22,8 @@ const ERROR_MESSAGES = {
   'auth/user-not-found': 'E-mail ou mot de passe incorrect.',
   'auth/too-many-requests': 'Trop de tentatives, réessaie plus tard.',
   'auth/network-request-failed': 'Pas de connexion réseau.',
+  'auth/account-exists-with-different-credential': 'Cet e-mail est déjà utilisé avec un autre mode de connexion.',
+  'auth/popup-closed-by-user': 'Connexion annulée.',
 };
 
 export function authErrorMessage(err) {
@@ -37,6 +44,19 @@ export function logOut() {
 
 export function resetPassword(email) {
   return sendPasswordResetEmail(auth, email);
+}
+
+// Redirection plutot que popup : plus fiable en PWA installee (standalone),
+// ou les popups sont parfois bloquees/mal gerees par le navigateur.
+export function signInWithGoogle() {
+  return signInWithRedirect(auth, googleProvider);
+}
+
+// A appeler une fois au demarrage : recupere l'erreur d'un signInWithGoogle
+// precedent si la redirection a echoue (onAuthStateChanged gere deja le cas
+// de succes). Resout a `null` s'il n'y avait pas de redirection en cours.
+export function consumeRedirectError() {
+  return getRedirectResult(auth).then(() => null).catch((err) => err);
 }
 
 export function watchAuth(cb) {

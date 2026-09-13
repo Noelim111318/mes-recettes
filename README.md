@@ -56,7 +56,8 @@ il suffira d'élargir `allow read` dans `firestore.rules`.
 ## Mise en place Firebase (une fois)
 
 1. Créer un projet sur la [console Firebase](https://console.firebase.google.com).
-2. **Authentication** → Sign-in method → activer *E-mail/Mot de passe*.
+2. **Authentication** → Sign-in method → activer *E-mail/Mot de passe* et *Google*
+   (celui-ci demande un e-mail d'assistance du projet).
 3. **Firestore Database** → créer une base (mode production).
 4. **Storage** → activer. Ça demande de passer au plan **Blaze** (carte
    bancaire à associer **une fois, au niveau du projet** — pas par
