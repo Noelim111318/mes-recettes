@@ -20,7 +20,7 @@ import {
 // afficher/masquer le bouton cote interface.
 var ADMIN_UID = 'EwBMsqx4MGXHNHcPlkpb7StazJp2';
 
-var APP_VERSION = 'v1.10.3';
+var APP_VERSION = 'v1.10.4';
 var E = window.AppEngine;
 var DATA = window.APP_DATA || {};
 
@@ -137,28 +137,59 @@ function frNumbersToDigits(text) {
 // actif partout (reglage iOS, etc.) : ce bouton dicte directement dans le
 // champ via l'API Web Speech, quand le navigateur la supporte.
 var SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+// Le navigateur coupe la reconnaissance apres ~1-2 s de silence et ce delai
+// n'est pas reglable : on la relance donc automatiquement tant que la personne
+// n'a pas re-appuye sur le micro (ou apres IDLE_STOP_MS sans rien dire, pour
+// ne pas laisser le micro ouvert indefiniment).
+var MIC_IDLE_STOP_MS = 30000;
 function attachMic(input, btn) {
   if (!input || !btn) return;
   if (!SpeechRecognitionCtor) { btn.remove(); return; }
   btn.hidden = false;
   var recognition = null;
-  var listening = false;
+  var wantListening = false;
+  var lastActivity = 0;
+
+  function stopListening() {
+    wantListening = false;
+    btn.classList.remove('mic-btn--on');
+  }
+
   btn.addEventListener('click', function () {
-    if (listening) { if (recognition) recognition.stop(); return; }
+    if (wantListening) { stopListening(); if (recognition) recognition.stop(); return; }
     recognition = new SpeechRecognitionCtor();
     recognition.lang = 'fr-FR';
+    recognition.continuous = true;
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
-    recognition.onstart = function () { listening = true; btn.classList.add('mic-btn--on'); };
-    recognition.onend = function () { listening = false; btn.classList.remove('mic-btn--on'); };
-    recognition.onerror = function () { listening = false; btn.classList.remove('mic-btn--on'); };
     recognition.onresult = function (e) {
-      var transcript = frNumbersToDigits(e.results[0][0].transcript);
-      var sep = input.value && !/\s$/.test(input.value) ? ' ' : '';
-      input.value = input.value ? input.value + sep + transcript : transcript;
+      lastActivity = Date.now();
+      // resultIndex : ne traite que les nouveaux resultats (certains
+      // navigateurs mobiles renvoient sinon toute la liste a chaque fois).
+      for (var i = e.resultIndex; i < e.results.length; i++) {
+        if (!e.results[i].isFinal) continue;
+        var transcript = frNumbersToDigits(e.results[i][0].transcript.trim());
+        if (!transcript) continue;
+        var sep = input.value && !/\s$/.test(input.value) ? ' ' : '';
+        input.value = input.value ? input.value + sep + transcript : transcript;
+      }
       // Pas de input.focus() ici : ça rouvrirait le clavier juste apres avoir dicte.
     };
-    recognition.start();
+    // Erreurs fatales (micro refuse, reseau...) : on arrete pour de bon ;
+    // "no-speech" (silence) ne l'est pas, onend relancera.
+    recognition.onerror = function (e) {
+      if (e && e.error !== 'no-speech') stopListening();
+    };
+    recognition.onend = function () {
+      if (wantListening && Date.now() - lastActivity < MIC_IDLE_STOP_MS) {
+        try { recognition.start(); return; } catch (err) { /* deja demarre : on arrete */ }
+      }
+      stopListening();
+    };
+    wantListening = true;
+    lastActivity = Date.now();
+    btn.classList.add('mic-btn--on');
+    try { recognition.start(); } catch (err) { stopListening(); }
   });
 }
 attachMic(E.$('#field-title'), E.$('#field-title-mic'));
