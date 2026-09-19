@@ -102,8 +102,8 @@ que `APP_CHECK_SITE_KEY` est vide dans `firebase-config.js`.
 
 1. `gcloud services enable recaptchaenterprise.googleapis.com firebaseappcheck.googleapis.com`
 2. `gcloud recaptcha keys create --web --integration-type=score --display-name=mes-recettes --domains=<domaines Hosting>,localhost`
-   → identifiant de clé = clé de site à coller dans `APP_CHECK_SITE_KEY`.
-3. Lier la clé à l'app dans App Check (API `apps/<appId>/recaptchaEnterpriseConfig`,
+   → identifiant de clé = clé de site à coller dans `APP_CHECK_SITE_KEY` (fait).
+3. Lier la clé à l'app dans App Check (fait ; API `apps/<appId>/recaptchaEnterpriseConfig`,
    ou console Firebase → App Check → reCAPTCHA Enterprise).
 4. Laisser tourner quelques jours : App Check → Firestore / Storage affichent
    la part de requêtes « vérifiées ». Puis **Appliquer** (enforcement) sur

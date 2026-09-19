@@ -11,7 +11,7 @@
  */
 // Cle de site reCAPTCHA Enterprise pour App Check (publique, pas un secret). Vide =
 // App Check desactive. Voir README > App Check pour l'obtenir.
-export const APP_CHECK_SITE_KEY = '';
+export const APP_CHECK_SITE_KEY = '6LdK9cMtAAAAADcHYv7J3Ik6E7_USUu7_7Q2Dr92';
 
 export const firebaseConfig = {
   apiKey: 'AIzaSyDewBKNIa4Avvb1SCS52OCMrOafOvAQ8J0',
