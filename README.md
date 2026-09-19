@@ -96,15 +96,15 @@ unique) et **3 photos par recette**, appliqué dans `firestore.rules`.
 ## App Check (anti-bots)
 
 Prouve à Firestore/Storage que la requête vient de l'app et pas d'un script
-qui appelle l'API directement (reCAPTCHA v3, gratuit). Désactivé tant que
-`APP_CHECK_SITE_KEY` est vide dans `firebase-config.js`.
+qui appelle l'API directement (reCAPTCHA Enterprise, gratuit jusqu'à 10 000
+évaluations/mois — largement assez ici, un jeton dure 1 h). Désactivé tant
+que `APP_CHECK_SITE_KEY` est vide dans `firebase-config.js`.
 
-1. [reCAPTCHA admin](https://www.google.com/recaptcha/admin) → nouveau site,
-   type **v3**, domaines : celui d'Hosting (`*.web.app` / `*.firebaseapp.com`)
-   + `localhost` → copier la *clé du site* et la *clé secrète*.
-2. Console Firebase → App Check → Applications → app Web → fournisseur
-   reCAPTCHA v3 → coller la clé secrète.
-3. Coller la clé du site dans `APP_CHECK_SITE_KEY` (déjà fait ; la clé secrète reste dans `cle_secrete`, ignoré par git), déployer.
+1. `gcloud services enable recaptchaenterprise.googleapis.com firebaseappcheck.googleapis.com`
+2. `gcloud recaptcha keys create --web --integration-type=score --display-name=mes-recettes --domains=<domaines Hosting>,localhost`
+   → identifiant de clé = clé de site à coller dans `APP_CHECK_SITE_KEY`.
+3. Lier la clé à l'app dans App Check (API `apps/<appId>/recaptchaEnterpriseConfig`,
+   ou console Firebase → App Check → reCAPTCHA Enterprise).
 4. Laisser tourner quelques jours : App Check → Firestore / Storage affichent
    la part de requêtes « vérifiées ». Puis **Appliquer** (enforcement) sur
    Firestore et Storage. Pas sur Auth (exige Identity Platform, payant) :

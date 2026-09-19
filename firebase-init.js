@@ -8,7 +8,7 @@
 // Version epinglee (le specificateur d'un import ES doit etre un litteral,
 // impossible a construire depuis une variable) : garder les 5 URLs alignees.
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
-import { initializeAppCheck, ReCaptchaV3Provider } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app-check.js';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app-check.js';
 import { getAuth } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
 import {
   initializeFirestore,
@@ -21,7 +21,7 @@ import { firebaseConfig, APP_CHECK_SITE_KEY } from './firebase-config.js';
 
 const app = initializeApp(firebaseConfig);
 
-// App Check (reCAPTCHA v3) : prouve a Firestore/Storage que la requete vient
+// App Check (reCAPTCHA Enterprise) : prouve a Firestore/Storage que la requete vient
 // bien de cette app et pas d'un script qui appelle l'API directement. A
 // initialiser avant tout autre service. Sur localhost, jeton de debug (imprime
 // dans la console, a enregistrer dans la console Firebase > App Check).
@@ -30,7 +30,7 @@ if (APP_CHECK_SITE_KEY) {
     self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
   }
   initializeAppCheck(app, {
-    provider: new ReCaptchaV3Provider(APP_CHECK_SITE_KEY),
+    provider: new ReCaptchaEnterpriseProvider(APP_CHECK_SITE_KEY),
     isTokenAutoRefreshEnabled: true,
   });
 }

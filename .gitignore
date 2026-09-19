@@ -15,6 +15,3 @@ __pycache__/
 mes-recettes-aea4e-*.json
 *-firebase-adminsdk-*.json
 
-
-# Cles locales (reCAPTCHA / App Check) — la cle secrete ne doit jamais etre commitee.
-cle_*
