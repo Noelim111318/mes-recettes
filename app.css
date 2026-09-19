@@ -150,7 +150,12 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus { outl
   font-size: 1.1rem;
   cursor: pointer;
 }
-.dynamic-list-remove:hover { color: var(--red); border-color: var(--red); }
+/* Survol reserve aux appareils avec souris : sur ecran tactile :hover reste
+   "colle" apres un toucher (la croix suivante, qui prend la place de celle
+   qu'on vient d'effacer, apparaitrait en rouge). */
+@media (hover: hover) {
+  .dynamic-list-remove:hover { color: var(--red); border-color: var(--red); }
+}
 
 .row-move {
   flex: 0 0 auto;
@@ -170,7 +175,7 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus { outl
   cursor: pointer;
 }
 .row-move-btn:not(:last-child) { border-bottom: 1px solid var(--card-border); }
-.row-move-btn:hover { color: var(--yellow); }
+@media (hover: hover) { .row-move-btn:hover { color: var(--yellow); } }
 .row-move-btn:active { background: color-mix(in srgb, var(--yellow) 14%, transparent); }
 
 /* --------------------------------------------------------------- Photos */
@@ -209,7 +214,7 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus { outl
   line-height: 1;
   cursor: pointer;
 }
-.photo-thumb-cover-btn:hover { background: rgba(0, 0, 0, 0.75); color: var(--yellow); }
+@media (hover: hover) { .photo-thumb-cover-btn:hover { background: rgba(0, 0, 0, 0.75); color: var(--yellow); } }
 .photo-thumb-badge {
   position: absolute; bottom: 0; left: 0; right: 0;
   background: color-mix(in srgb, var(--yellow) 85%, black);
@@ -295,7 +300,8 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus { outl
   cursor: pointer;
 }
 .menu-item:last-child { border-bottom: none; }
-.menu-item:hover, .menu-item:active { background: color-mix(in srgb, var(--yellow) 14%, transparent); }
+.menu-item:active { background: color-mix(in srgb, var(--yellow) 14%, transparent); }
+@media (hover: hover) { .menu-item:hover { background: color-mix(in srgb, var(--yellow) 14%, transparent); } }
 
 /* ---------------------------------------------------------- Liste recettes */
 .recipe-list {
@@ -326,6 +332,7 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus { outl
 .recipe-card-title { font-weight: 800; color: var(--ink); font-size: 0.98rem; line-height: 1.25; }
 
 .chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+#share-list:not(:empty) { margin-top: 10px; }
 .chip {
   font-size: 0.72rem; font-weight: 800;
   color: var(--yellow);
