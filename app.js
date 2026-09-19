@@ -20,7 +20,7 @@ import {
 // afficher/masquer le bouton cote interface.
 var ADMIN_UID = 'EwBMsqx4MGXHNHcPlkpb7StazJp2';
 
-var APP_VERSION = 'v1.10.5';
+var APP_VERSION = 'v1.10.6';
 var E = window.AppEngine;
 var DATA = window.APP_DATA || {};
 
@@ -494,14 +494,41 @@ function renderRecipeCard(recipe, returnScreen, showOwner) {
   return card;
 }
 
+// Cartes deja construites, reutilisees tant que la recette n'a pas change :
+// sans ca, chaque mise a jour (favori, recette partagee, sync...) recreait
+// toutes les <img> de la liste, qui re-chargeaient et clignotaient.
+var cardCache = {};
+function cachedRecipeCard(recipe, returnScreen, showOwner) {
+  var key = returnScreen + '|' + recipe.id;
+  var sig = JSON.stringify(recipe) + '|' + showOwner;
+  var hit = cardCache[key];
+  if (hit && hit.sig === sig) return hit.card;
+  var card = renderRecipeCard(recipe, returnScreen, showOwner);
+  cardCache[key] = { sig: sig, card: card };
+  return card;
+}
+
+// wrap <- cartes de `shown` ; `all` = toutes les recettes de cet ecran, pour ne
+// purger du cache que celles qui ont vraiment disparu (pas celles juste
+// masquees par un filtre).
+function renderCards(wrap, shown, all, returnScreen, showOwnerOf) {
+  var keep = {};
+  all.forEach(function (r) { keep[returnScreen + '|' + r.id] = true; });
+  Object.keys(cardCache).forEach(function (k) {
+    if (k.indexOf(returnScreen + '|') === 0 && !keep[k]) delete cardCache[k];
+  });
+  wrap.replaceChildren.apply(wrap, shown.map(function (r) {
+    return cachedRecipeCard(r, returnScreen, showOwnerOf(r));
+  }));
+}
+
 function renderList() {
   var list = E.$('#recipe-list');
   var empty = E.$('#empty-state');
   var all = combinedRecipes();
   var filtered = filterRecipes(all, E.$('#search-input'), E.$('#category-filter'), E.$('#favorites-filter'), E.$('#shared-filter'));
 
-  list.textContent = '';
-  filtered.forEach(function (r) { list.appendChild(renderRecipeCard(r, 'screen-home', !!r.__shared)); });
+  renderCards(list, filtered, all, 'screen-home', function (r) { return !!r.__shared; });
 
   if (filtered.length === 0) {
     empty.hidden = false;
@@ -566,10 +593,16 @@ function openDetail(recipe, returnScreen) {
   if (photos.length) {
     photos.forEach(function (p) {
       var img = document.createElement('img');
-      img.src = p.url;
+      // Miniature (deja en cache : c'est celle de la liste) tout de suite, puis
+      // la pleine taille (decodage plus long) la remplace des qu'elle est prete.
+      img.src = p.thumbUrl;
       img.alt = '';
-      img.loading = 'lazy';
       photosWrap.appendChild(img);
+      if (p.url !== p.thumbUrl) {
+        var full = new Image();
+        full.onload = function () { img.src = p.url; };
+        full.src = p.url;
+      }
     });
     photosWrap.hidden = false;
   } else {
@@ -1096,8 +1129,7 @@ function renderAdminList() {
   var empty = E.$('#admin-empty-state');
   var filtered = filterRecipes(allRecipes, E.$('#admin-search-input'), E.$('#admin-category-filter'));
 
-  wrap.textContent = '';
-  filtered.forEach(function (r) { wrap.appendChild(renderRecipeCard(r, 'screen-admin', true)); });
+  renderCards(wrap, filtered, allRecipes, 'screen-admin', function () { return true; });
 
   if (filtered.length === 0) {
     empty.hidden = false;
@@ -1504,6 +1536,7 @@ watchAuth(function (user) {
     stopRecipesSubscription();
     stopSharedSubscription();
     stopQuotaSubscriptions();
+    cardCache = {};
     if (unsubscribeAllRecipes) { unsubscribeAllRecipes(); unsubscribeAllRecipes = null; }
     allRecipes = [];
     adminUsers = [];

@@ -166,6 +166,11 @@ Une fois fait, chaque `git push` sur `main` déploie automatiquement.
 - **Moteur pwa-engine** : `../toolbox/pwa-engine/tools/sync-engine.sh
   <chemin>/recettes` puis `./tools/bump-version.sh vX.Y.Z` ici (le cache SW
   inclut `engine/*`, sans bump les clients gardent l'ancien).
+- **CORS du bucket Storage** (déjà appliqué) : sans lui, le service worker ne
+  peut pas mettre les photos en cache (réponse illisible), et Storage les
+  sert en `private, max-age=0` (rechargées à chaque visite). À réappliquer si
+  le bucket change ou qu'on ajoute un domaine :
+  `gcloud storage buckets update gs://mes-recettes-aea4e.firebasestorage.app --cors-file=tools/storage-cors.json`
 - **Nouveau fichier statique** : l'ajouter à `APP_SHELL` dans
   `service-worker.js`.
 
