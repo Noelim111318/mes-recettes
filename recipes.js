@@ -11,7 +11,7 @@ import { db, storage } from './firebase-init.js';
 import {
   collection, query, where, orderBy, onSnapshot,
   addDoc, updateDoc, deleteDoc, doc, getDoc, getDocs, setDoc,
-  arrayUnion, arrayRemove, limit,
+  arrayUnion, arrayRemove, limit, writeBatch,
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 import {
   ref, uploadBytes, getDownloadURL, deleteObject, getMetadata,
@@ -19,6 +19,8 @@ import {
 
 const RECIPES = collection(db, 'recipes');
 const USERS = collection(db, 'users');
+const QUOTAS = collection(db, 'quotas');
+const UNLOCK_REQUESTS = collection(db, 'unlockRequests');
 // 1600px suffit a l'ecran mais pas a l'impression (a peine ~13 cm de large a
 // 300 dpi). 3000px couvre une pleine page de livre (jusqu'a ~25 cm a 300
 // dpi) tout en restant tres loin des quotas gratuits (5 Go = ~1700 photos a
@@ -30,6 +32,11 @@ const JPEG_QUALITY = 0.9;
 // l'afficher en 88px de cote.
 const THUMB_DIM = 320;
 const THUMB_QUALITY = 0.6;
+
+// Limites d'un compte non debloque (miroir de firestore.rules : 2 emplacements
+// {uid}_1 / {uid}_2 et 3 photos par recette).
+export const FREE_MAX_RECIPES = 2;
+export const FREE_MAX_PHOTOS = 3;
 
 export function subscribeToRecipes(ownerId, onChange, onError) {
   // Tri alphabetique stable : un ordre par derniere modification changeait a
@@ -66,13 +73,82 @@ export function subscribeToSharedWithMe(uid, onChange, onError) {
   }, onError);
 }
 
+/* ----------------------------------------------------- Quotas / deblocage */
+// Premier emplacement libre ({uid}_1, {uid}_2) parmi mes recettes, ou null
+// s'il n'en reste plus. Voir isFreeSlot dans firestore.rules.
+export function freeRecipeSlot(uid, myRecipes) {
+  const used = new Set(myRecipes.map((r) => r.id));
+  for (let i = 1; i <= FREE_MAX_RECIPES; i++) {
+    if (!used.has(`${uid}_${i}`)) return `${uid}_${i}`;
+  }
+  return null;
+}
+
+// Compte debloque = le document quotas/{uid} existe (ecrit par l'admin).
+export function subscribeToApproval(uid, onChange, onError) {
+  return onSnapshot(doc(QUOTAS, uid), (snap) => onChange(snap.exists()), onError);
+}
+
+// Ma demande de deblocage ({ message, status? }) ou null.
+export function subscribeToUnlockRequest(uid, onChange, onError) {
+  return onSnapshot(doc(UNLOCK_REQUESTS, uid), (snap) => onChange(snap.exists() ? snap.data() : null), onError);
+}
+
+// Remplace la demande precedente (y compris une demande refusee : le champ
+// `status` disparait, donc elle repasse "en attente").
+export function sendUnlockRequest(uid, email, message) {
+  return setDoc(doc(UNLOCK_REQUESTS, uid), { email: email || '', message, createdAt: Date.now() });
+}
+
+// Admin : uids debloques + demandes en cours ({ uid, email, message, createdAt, status? }).
+export async function fetchQuotaState() {
+  const [quotas, requests] = await Promise.all([getDocs(QUOTAS), getDocs(UNLOCK_REQUESTS)]);
+  return {
+    approved: quotas.docs.map((d) => d.id),
+    requests: requests.docs.map((d) => ({ uid: d.id, ...d.data() })),
+  };
+}
+
+// Debloque un compte et solde sa demande d'un coup.
+export function approveUser(uid) {
+  const batch = writeBatch(db);
+  batch.set(doc(QUOTAS, uid), { approvedAt: Date.now() });
+  batch.delete(doc(UNLOCK_REQUESTS, uid));
+  return batch.commit();
+}
+
+export function revokeUser(uid) {
+  return deleteDoc(doc(QUOTAS, uid));
+}
+
+export function rejectUnlockRequest(uid) {
+  return updateDoc(doc(UNLOCK_REQUESTS, uid), { status: 'refused' });
+}
+
 /* ---------------------------------------------------- Annuaire / partage */
 // A appeler une fois par connexion : garde a jour uid -> e-mail, necessaire
 // pour retrouver l'uid d'une personne a partir de son e-mail (l'Admin SDK
 // qui permettrait de le faire directement n'est pas accessible cote
 // navigateur).
-export function upsertUserProfile(uid, email) {
-  return setDoc(doc(USERS, uid), { email: email || '' }, { merge: true });
+//
+// meta : auth.currentUser.metadata (creationTime / lastSignInTime), recopie
+// ici pour que la vue admin puisse afficher inscription / derniere connexion
+// (Firebase Auth n'expose pas la liste des comptes cote navigateur).
+export function upsertUserProfile(uid, email, meta) {
+  const data = { email: email || '' };
+  const created = meta && Date.parse(meta.creationTime);
+  const lastLogin = meta && Date.parse(meta.lastSignInTime);
+  if (created) data.createdAt = created;
+  if (lastLogin) data.lastLoginAt = lastLogin;
+  return setDoc(doc(USERS, uid), data, { merge: true });
+}
+
+// Tous les comptes de l'annuaire (uid, email, createdAt, lastLoginAt) —
+// lecture ouverte a toute personne connectee par les regles, utilisee ici
+// par la vue admin. Ponctuel (getDocs) : pas besoin d'un flux continu.
+export async function fetchAllUsers() {
+  const snap = await getDocs(USERS);
+  return snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
 }
 
 // Retrouve l'uid d'une utilisatrice a partir de son e-mail exact (sensible a
@@ -154,7 +230,9 @@ export async function fetchLegacyPhotoSize(path, thumbPath) {
 // deja des photos existantes.
 // removedPhotos : { path, thumbPath }[], photos retirees (supprimees du
 // Storage apres l'ecriture reussie du document).
-export async function saveRecipe(ownerId, recipeId, fields, orderedPhotos, removedPhotos) {
+// newRecipeId : a la creation seulement, id impose (emplacement d'un compte
+// non debloque, voir freeRecipeSlot) ; sinon id automatique.
+export async function saveRecipe(ownerId, recipeId, fields, orderedPhotos, removedPhotos, newRecipeId) {
   const photos = [];
   let photoError = null;
   const online = navigator.onLine;
@@ -221,8 +299,13 @@ export async function saveRecipe(ownerId, recipeId, fields, orderedPhotos, remov
     payload.sharedWith = [];
     payload.favoritedBy = [];
     payload.createdAt = Date.now();
-    const created = await addDoc(RECIPES, payload);
-    id = created.id;
+    if (newRecipeId) {
+      await setDoc(doc(RECIPES, newRecipeId), payload);
+      id = newRecipeId;
+    } else {
+      const created = await addDoc(RECIPES, payload);
+      id = created.id;
+    }
   }
 
   (removedPhotos || []).forEach((p) => {

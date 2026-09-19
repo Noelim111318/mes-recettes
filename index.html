@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Mes Recettes</title>
   <meta name="description" content="Mes Recettes — PWA installable, fonctionne hors-ligne.">
-  <meta name="app-version" content="v1.7.4">
+  <meta name="app-version" content="v1.10.0">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#2B1B12">
   <meta name="mobile-web-app-capable" content="yes">
@@ -24,7 +24,7 @@
 <a class="skip-link" href="#main">Aller au contenu</a>
 
 <main class="container" id="main">
-  <div class="version-badge" id="app-version">v1.7.4</div>
+  <div class="version-badge" id="app-version">v1.10.0</div>
 
   <div class="install-row" id="install-row" hidden>
     <button class="install-btn" id="install-btn" type="button" aria-label="Installer l'application">📲 Installer l'appli</button>
@@ -78,6 +78,10 @@
         </div>
       </div>
       <p class="offline-badge" id="offline-badge" role="status" hidden>📡 Hors-ligne — tes modifs seront synchronisées au retour du réseau.</p>
+      <div class="quota-banner" id="quota-banner" role="status" hidden>
+        <span id="quota-banner-text"></span>
+        <button class="btn btn--ghost" type="button" id="quota-banner-btn">Demander le déblocage</button>
+      </div>
       <div class="search-row">
         <input class="form-input" type="search" id="search-input" placeholder="Rechercher…" aria-label="Rechercher une recette">
         <select class="form-input filter-select" id="category-filter" aria-label="Filtrer par catégorie">
@@ -263,11 +267,15 @@
   <div class="screen" id="screen-admin">
     <div class="topbar">
       <div class="topbar-row">
-        <h1>Toutes les recettes</h1>
+        <h1>Administration</h1>
         <button class="btn btn--ghost" type="button" id="admin-back-btn">← Retour</button>
       </div>
       <p class="admin-usage" id="admin-usage"></p>
-      <div class="search-row">
+      <div class="admin-tabs" role="tablist">
+        <button class="btn btn--ghost admin-tab is-active" type="button" role="tab" aria-selected="true" data-admin-tab="recipes">Recettes</button>
+        <button class="btn btn--ghost admin-tab" type="button" role="tab" aria-selected="false" data-admin-tab="users">Utilisateurs</button>
+      </div>
+      <div class="search-row" id="admin-recipes-filters">
         <input class="form-input" type="search" id="admin-search-input" placeholder="Rechercher…" aria-label="Rechercher une recette">
         <select class="form-input filter-select" id="admin-category-filter" aria-label="Filtrer par catégorie">
           <option value="">Toutes</option>
@@ -276,6 +284,36 @@
     </div>
     <div class="recipe-list" id="admin-recipe-list"></div>
     <p class="empty-state" id="admin-empty-state" hidden></p>
+    <div class="user-list" id="admin-user-list" hidden></div>
+  </div>
+
+  <!-- ECRAN 8 : demande de deblocage du compte -->
+  <div class="screen" id="screen-unlock">
+    <div class="panel">
+      <h2>Débloquer mon compte</h2>
+      <p class="unlock-intro" id="unlock-intro"></p>
+      <p class="unlock-status" id="unlock-status" role="status" hidden></p>
+      <div id="unlock-verify" hidden>
+        <p class="unlock-intro" id="unlock-verify-text"></p>
+        <p class="unlock-status" id="unlock-verify-status" role="status" hidden></p>
+        <div class="form-actions">
+          <button class="btn btn--ghost" type="button" id="unlock-verify-back-btn">Retour</button>
+          <button class="btn btn--ghost" type="button" id="unlock-resend-btn">Renvoyer l'e-mail</button>
+          <button class="btn btn--primary" type="button" id="unlock-check-btn">J'ai vérifié</button>
+        </div>
+      </div>
+      <form id="unlock-form" novalidate>
+        <label class="form-field">
+          <span class="form-label">Pourquoi as-tu besoin de plus de place ? *</span>
+          <textarea class="form-input" id="unlock-message" rows="5" maxlength="500" placeholder="ex. Je suis une amie de Noëlie, je voudrais ranger mes recettes de famille…"></textarea>
+        </label>
+        <p class="form-error" id="unlock-error" role="alert" hidden></p>
+        <div class="form-actions">
+          <button class="btn btn--ghost" type="button" id="unlock-cancel-btn">Retour</button>
+          <button class="btn btn--primary" type="submit" id="unlock-submit-btn">Envoyer la demande</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <!-- ECRAN 7 : export pour impression (toutes mes recettes, une longue fiche) -->

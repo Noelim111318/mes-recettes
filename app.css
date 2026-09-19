@@ -236,6 +236,38 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus { outl
 .filter-select { flex: 1 1 160px; }
 .filter-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .admin-usage { font-size: 0.8rem; color: var(--ink-dim); text-align: center; }
+.admin-tabs { display: flex; gap: 8px; }
+.admin-tab { flex: 1; }
+.admin-tab.is-active { color: var(--bg); background: var(--yellow); border-color: var(--yellow); }
+.user-list { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+.user-row {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.user-row-email { font-weight: 800; color: var(--ink); font-size: 0.95rem; overflow-wrap: anywhere; }
+.user-row-request {
+  margin: 0; padding: 8px 10px;
+  font-size: 0.85rem; color: var(--ink);
+  background: color-mix(in srgb, var(--yellow) 10%, transparent);
+  border-left: 3px solid var(--yellow);
+  border-radius: 6px;
+  overflow-wrap: anywhere; white-space: pre-wrap;
+}
+.user-row-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.quota-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  font-size: 0.82rem; font-weight: 700; color: var(--ink-soft);
+  background: color-mix(in srgb, var(--yellow) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--yellow) 30%, transparent);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.unlock-intro { color: var(--ink-soft); margin: 0 0 12px; }
+.unlock-status { font-weight: 700; color: var(--yellow); margin: 0 0 12px; }
+.user-row-dates { font-size: 0.76rem; color: var(--ink-dim); }
 
 /* --------------------------------------------------------- Menu (⋮) */
 .menu-wrap { position: relative; }

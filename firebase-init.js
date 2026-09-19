@@ -6,8 +6,9 @@
  * service-worker.js en meme temps.
  */
 // Version epinglee (le specificateur d'un import ES doit etre un litteral,
-// impossible a construire depuis une variable) : garder les 4 URLs alignees.
+// impossible a construire depuis une variable) : garder les 5 URLs alignees.
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
+import { initializeAppCheck, ReCaptchaV3Provider } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app-check.js';
 import { getAuth } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
 import {
   initializeFirestore,
@@ -16,9 +17,23 @@ import {
   persistentMultipleTabManager,
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 import { getStorage } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js';
-import { firebaseConfig } from './firebase-config.js';
+import { firebaseConfig, APP_CHECK_SITE_KEY } from './firebase-config.js';
 
 const app = initializeApp(firebaseConfig);
+
+// App Check (reCAPTCHA v3) : prouve a Firestore/Storage que la requete vient
+// bien de cette app et pas d'un script qui appelle l'API directement. A
+// initialiser avant tout autre service. Sur localhost, jeton de debug (imprime
+// dans la console, a enregistrer dans la console Firebase > App Check).
+if (APP_CHECK_SITE_KEY) {
+  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+    self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+  }
+  initializeAppCheck(app, {
+    provider: new ReCaptchaV3Provider(APP_CHECK_SITE_KEY),
+    isTokenAutoRefreshEnabled: true,
+  });
+}
 
 export const auth = getAuth(app);
 

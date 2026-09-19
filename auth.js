@@ -6,6 +6,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
+  sendEmailVerification,
   GoogleAuthProvider,
   signInWithPopup,
   signInWithRedirect,
@@ -31,8 +32,29 @@ export function authErrorMessage(err) {
   return ERROR_MESSAGES[err && err.code] || 'Une erreur est survenue, réessaie.';
 }
 
+// Envoie l'e-mail de verification dans la foulee (best-effort : le renvoi
+// reste possible depuis l'app). Les creations de recettes l'exigent (voir
+// firestore.rules), les comptes Google sont verifies d'office.
 export function signUp(email, password) {
-  return createUserWithEmailAndPassword(auth, email, password);
+  return createUserWithEmailAndPassword(auth, email, password).then((cred) => {
+    sendEmailVerification(cred.user).catch(() => {});
+    return cred;
+  });
+}
+
+export function sendVerificationEmail() {
+  return sendEmailVerification(auth.currentUser);
+}
+
+// Relit le compte et force un nouveau jeton (les regles lisent
+// `email_verified` dans le jeton, pas dans l'objet utilisateur). Renvoie le
+// nouvel etat de verification.
+export async function refreshEmailVerified() {
+  const user = auth.currentUser;
+  if (!user) return false;
+  await user.reload();
+  await user.getIdToken(true);
+  return user.emailVerified;
 }
 
 export function signIn(email, password) {

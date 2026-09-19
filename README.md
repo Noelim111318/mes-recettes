@@ -28,12 +28,13 @@ appels Firebase échouent.
 | `index.html` | coque + 4 écrans (`#screen-auth`, `#screen-home`, `#screen-form`, `#screen-detail`) |
 | `data.js` | suggestions de catégories (pas les recettes, qui vivent dans Firestore) |
 | `firebase-config.js` | config web Firebase (non secrète — à remplir, voir plus bas) |
-| `firebase-init.js` | initialise Auth / Firestore (cache local persistant) / Storage |
+| `firebase-init.js` | initialise App Check / Auth / Firestore (cache local persistant) / Storage |
 | `auth.js` | inscription / connexion / déconnexion / mot de passe oublié |
 | `recipes.js` | CRUD Firestore + upload/suppression photo Storage (compression client) |
 | `app.js` | câblage des 4 écrans, recherche/filtre, formulaire dynamique |
 | `app.css` | palette (`@import "engine/engine.css"` + tokens `:root` surchargés) |
-| `firestore.rules` / `storage.rules` | isolation par `ownerId` / `uid` |
+| `firestore.rules` / `storage.rules` | isolation par `ownerId` / `uid`, quotas des comptes non débloqués |
+| `service-worker.js` | identité du cache + cache-first des photos Firebase Storage (URLs immuables, cache `mes-recettes-photos`, 300 entrées max) |
 | `firebase.json` / `.firebaserc` | config Hosting + Firestore + Storage |
 | `engine/` | moteur pwa-engine, **copié** depuis `toolbox/pwa-engine` (ne pas éditer ici) |
 
@@ -59,6 +60,57 @@ appels Firebase échouent.
 `sharedWith` n'est écrit qu'à la création (toujours `[]`) et jamais lu
 ailleurs : pas de migration nécessaire le jour où le partage sera implémenté,
 il suffira d'élargir `allow read` dans `firestore.rules`.
+
+## Annuaire (Firestore, collection `users`)
+
+```
+{ email, createdAt, lastLoginAt }   // doc id = uid ; alimenté à chaque connexion
+```
+
+Lu par l'écran Admin (onglet *Utilisateurs* : inscription, dernière
+connexion, nombre de recettes/photos, espace estimé). `createdAt` /
+`lastLoginAt` viennent de `user.metadata` (Firebase Auth) et n'apparaissent
+qu'à la prochaine connexion de chaque compte.
+
+## Quotas anti-abus et déblocage
+
+Un compte non débloqué est limité à **2 recettes** (emplacements à l'id imposé
+`{uid}_1` / `{uid}_2` : les règles ne savent pas compter, mais un id est
+unique) et **3 photos par recette**, appliqué dans `firestore.rules`.
+
+- `quotas/{uid}` : existe = compte débloqué (écrit par l'admin seul).
+- `unlockRequests/{uid}` : `{ email, message, createdAt, status? }`, demande
+  avec motivation (500 car. max) envoyée depuis l'écran « Débloquer mon
+  compte » ; `status: 'refused'` posé par l'admin.
+- Écran Admin → *Utilisateurs* : demandes en attente en tête ; boutons
+  Débloquer / Refuser / Re-limiter.
+- **E-mail vérifié obligatoire** pour créer une recette ou envoyer une demande
+  (jeton `email_verified`, vérifié dans les règles) ; les comptes Google le
+  sont d'office, un compte débloqué par l'admin en est dispensé. Le lien est
+  envoyé à l'inscription, renvoyable depuis l'écran de déblocage.
+- Limite connue : le nombre de fichiers envoyés dans Storage n'est pas
+  plafonnable côté règles (taille ≤ 5 Mo seulement) ; filet : alerte de
+  budget Blaze. **À la 1re mise en ligne, tous les comptes existants sont
+  limités** : les débloquer depuis l'écran Admin.
+
+## App Check (anti-bots)
+
+Prouve à Firestore/Storage que la requête vient de l'app et pas d'un script
+qui appelle l'API directement (reCAPTCHA v3, gratuit). Désactivé tant que
+`APP_CHECK_SITE_KEY` est vide dans `firebase-config.js`.
+
+1. [reCAPTCHA admin](https://www.google.com/recaptcha/admin) → nouveau site,
+   type **v3**, domaines : celui d'Hosting (`*.web.app` / `*.firebaseapp.com`)
+   + `localhost` → copier la *clé du site* et la *clé secrète*.
+2. Console Firebase → App Check → Applications → app Web → fournisseur
+   reCAPTCHA v3 → coller la clé secrète.
+3. Coller la clé du site dans `APP_CHECK_SITE_KEY`, déployer.
+4. Laisser tourner quelques jours : App Check → Firestore / Storage affichent
+   la part de requêtes « vérifiées ». Puis **Appliquer** (enforcement) sur
+   Firestore et Storage. Pas sur Auth (exige Identity Platform, payant) :
+   l'inscription reste protégée par la vérification d'e-mail + les quotas.
+5. En local : le jeton de debug s'affiche dans la console du navigateur, à
+   enregistrer dans App Check → Gérer les jetons de débogage.
 
 ## Mise en place Firebase (une fois)
 

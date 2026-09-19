@@ -4,13 +4,15 @@
  */
 import {
   watchAuth, signUp, signIn, logOut, resetPassword, authErrorMessage,
-  signInWithGoogle, consumeRedirectError,
+  signInWithGoogle, consumeRedirectError, sendVerificationEmail, refreshEmailVerified,
 } from './auth.js';
 import {
   subscribeToRecipes, subscribeToAllRecipes, subscribeToSharedWithMe,
   saveRecipe, deleteRecipe, recipePhotos, toggleFavorite,
   upsertUserProfile, findUserByEmail, getUserEmail, shareRecipeWith, unshareRecipeWith,
-  fetchLegacyPhotoSize,
+  fetchLegacyPhotoSize, fetchAllUsers,
+  FREE_MAX_RECIPES, FREE_MAX_PHOTOS, freeRecipeSlot, subscribeToApproval, subscribeToUnlockRequest,
+  sendUnlockRequest, fetchQuotaState, approveUser, revokeUser, rejectUnlockRequest,
 } from './recipes.js';
 
 // Doit rester identique a l'UID code en dur dans firestore.rules
@@ -18,7 +20,7 @@ import {
 // afficher/masquer le bouton cote interface.
 var ADMIN_UID = 'EwBMsqx4MGXHNHcPlkpb7StazJp2';
 
-var APP_VERSION = 'v1.7.4';
+var APP_VERSION = 'v1.10.0';
 var E = window.AppEngine;
 var DATA = window.APP_DATA || {};
 
@@ -42,10 +44,21 @@ var currentUser = null;
 var currentUserEmail = '';
 var recipes = [];
 var allRecipes = [];    // vue admin uniquement
+var adminUsers = [];    // vue admin uniquement (annuaire `users`)
+var adminApproved = {};  // vue admin : { uid: true } des comptes debloques
+var adminRequests = {};  // vue admin : { uid: { email, message, createdAt, status? } }
+var adminOwnerBytes = null; // vue admin : { ownerId: octets }, null tant que non calcule
 var sharedRecipes = []; // vue "partage avec moi"
 var unsubscribeRecipes = null;
 var unsubscribeAllRecipes = null;
 var unsubscribeShared = null;
+var unsubscribeApproval = null;
+var unsubscribeUnlock = null;
+var emailVerified = false;  // e-mail confirme (exige par firestore.rules pour creer une recette)
+var isApproved = false;     // compte debloque par l'admin (voir firestore.rules)
+var quotaLoaded = false;    // etat de deblocage connu (sinon on laisse les regles trancher)
+var myUnlockRequest = null; // ma demande de deblocage : { message, status? } ou null
+var unlockReturnScreen = 'screen-home';
 var authMode = 'signin';
 var editingRecipe = null;
 var viewingRecipe = null;
@@ -583,7 +596,7 @@ E.$('#detail-favorite-btn').addEventListener('click', function () {
 
 /* ----------------------------------------------------------- Dupliquer */
 function openFormAsDuplicate(recipe) {
-  openForm(null, 'screen-home');
+  if (!openForm(null, 'screen-home')) return;
   E.$('#field-title').value = recipe.title + ' (copie)';
   E.$('#field-category').value = recipe.category || '';
   E.$('#field-prep-time').value = recipe.prepMinutes || '';
@@ -689,6 +702,150 @@ E.$('#detail-leave-shared-btn').addEventListener('click', function () {
     });
 });
 
+/* ------------------------------------------------------ Quotas / deblocage */
+// Compte non debloque : 2 recettes (emplacements {uid}_1/{uid}_2) et 3 photos
+// par recette. La vraie limite est dans firestore.rules ; ceci evite juste
+// une erreur de permission incomprehensible.
+function isUnlocked() { return isApproved || currentUser === ADMIN_UID; }
+
+// { allowed, id } : id = emplacement impose a la creation (null = id auto).
+// Tant que l'etat de deblocage n'est pas connu (1re connexion hors-ligne), on
+// laisse passer et les regles decident.
+function newRecipeSlot() {
+  if (isUnlocked()) return { allowed: true, id: null };
+  if (!emailVerified) return { allowed: false, id: null };
+  var id = freeRecipeSlot(currentUser, recipes);
+  if (id) return { allowed: true, id: id };
+  return { allowed: !quotaLoaded, id: null };
+}
+
+function updateQuotaBanner() {
+  var banner = E.$('#quota-banner');
+  if (!currentUser || !quotaLoaded || isUnlocked()) { banner.hidden = true; return; }
+  var text, btn;
+  if (!emailVerified) {
+    text = 'Vérifie ton e-mail pour pouvoir créer des recettes.';
+    btn = 'Vérifier';
+  } else if (!myUnlockRequest) {
+    text = 'Compte en période d’essai : ' + FREE_MAX_RECIPES + ' recettes, ' + FREE_MAX_PHOTOS + ' photos par recette.';
+    btn = 'Demander le déblocage';
+  } else if (myUnlockRequest.status === 'refused') {
+    text = 'Ta demande de déblocage a été refusée.';
+    btn = 'Nouvelle demande';
+  } else {
+    text = 'Demande de déblocage envoyée, en attente de réponse.';
+    btn = 'Voir ma demande';
+  }
+  E.$('#quota-banner-text').textContent = text;
+  E.$('#quota-banner-btn').textContent = btn;
+  banner.hidden = false;
+}
+
+// Deux modes : e-mail pas encore verifie -> consigne de verification ;
+// sinon -> formulaire de demande de deblocage.
+var unlockReason = '';
+function renderUnlockScreen() {
+  var verifyMode = !emailVerified && !isUnlocked();
+  E.$('#unlock-verify').hidden = !verifyMode;
+  E.$('#unlock-form').hidden = verifyMode;
+  E.$('#unlock-intro').hidden = verifyMode;
+  var status = E.$('#unlock-status');
+  hideError('#unlock-verify-status');
+  E.$('#unlock-verify-status').hidden = true;
+  if (verifyMode) {
+    status.hidden = true;
+    E.$('#unlock-verify-text').textContent = 'Confirme d’abord ton adresse e-mail (' + currentUserEmail
+      + ') : clique sur le lien reçu par e-mail (pense à regarder les spams), puis reviens ici.';
+    return;
+  }
+  var refused = myUnlockRequest && myUnlockRequest.status === 'refused';
+  E.$('#unlock-intro').textContent = (unlockReason ? unlockReason + ' ' : '')
+    + 'Les nouveaux comptes sont limités à ' + FREE_MAX_RECIPES + ' recettes, avec ' + FREE_MAX_PHOTOS
+    + ' photos maximum par recette. Explique brièvement pourquoi tu as besoin de plus : ta demande sera examinée avant déblocage.';
+  status.hidden = !myUnlockRequest;
+  if (myUnlockRequest) {
+    status.textContent = refused
+      ? 'Ta précédente demande a été refusée. Tu peux en envoyer une nouvelle.'
+      : 'Demande envoyée, en attente de réponse. Tu peux la remplacer en renvoyant un message.';
+  }
+  E.$('#unlock-message').value = myUnlockRequest && !refused ? myUnlockRequest.message || '' : '';
+  hideError('#unlock-error');
+}
+
+function openUnlockScreen(returnScreen, reason) {
+  unlockReturnScreen = returnScreen || 'screen-home';
+  unlockReason = reason || '';
+  renderUnlockScreen();
+  E.screens.show('screen-unlock', { push: true });
+}
+
+function showVerifyStatus(msg) {
+  var el = E.$('#unlock-verify-status');
+  el.textContent = msg;
+  el.hidden = false;
+}
+
+E.$('#unlock-verify-back-btn').addEventListener('click', function () { E.screens.show(unlockReturnScreen, { push: true }); });
+E.$('#unlock-resend-btn').addEventListener('click', function () {
+  sendVerificationEmail()
+    .then(function () { showVerifyStatus('E-mail envoyé.'); })
+    .catch(function (err) { showVerifyStatus(authErrorMessage(err)); });
+});
+E.$('#unlock-check-btn').addEventListener('click', function () {
+  refreshEmailVerified()
+    .then(function (verified) {
+      emailVerified = verified;
+      updateQuotaBanner();
+      if (verified) renderUnlockScreen();
+      else showVerifyStatus('Pas encore vérifié : clique d’abord sur le lien reçu par e-mail.');
+    })
+    .catch(function (err) { showVerifyStatus(authErrorMessage(err)); });
+});
+
+E.$('#quota-banner-btn').addEventListener('click', function () { openUnlockScreen('screen-home'); });
+E.$('#unlock-cancel-btn').addEventListener('click', function () { E.screens.show(unlockReturnScreen, { push: true }); });
+
+E.$('#unlock-form').addEventListener('submit', function (e) {
+  e.preventDefault();
+  hideError('#unlock-error');
+  var message = E.$('#unlock-message').value.trim();
+  if (message.length < 10) return showError('#unlock-error', 'Explique ta demande en quelques mots (10 caractères minimum).');
+  var btn = E.$('#unlock-submit-btn');
+  btn.disabled = true;
+  sendUnlockRequest(currentUser, currentUserEmail, message)
+    .then(function () {
+      btn.disabled = false;
+      E.announce('Demande envoyée.');
+      E.screens.show('screen-home', { push: true });
+    })
+    .catch(function (err) {
+      btn.disabled = false;
+      showError('#unlock-error', "Impossible d'envoyer la demande : " + (err && err.message ? err.message : 'erreur inconnue.'));
+    });
+});
+
+function startQuotaSubscriptions(uid) {
+  stopQuotaSubscriptions();
+  unsubscribeApproval = subscribeToApproval(uid, function (approved) {
+    isApproved = approved;
+    quotaLoaded = true;
+    updateQuotaBanner();
+  }, function () { /* best-effort : les regles restent l'autorite */ });
+  unsubscribeUnlock = subscribeToUnlockRequest(uid, function (req) {
+    myUnlockRequest = req;
+    updateQuotaBanner();
+  }, function () {});
+}
+function stopQuotaSubscriptions() {
+  if (unsubscribeApproval) { unsubscribeApproval(); unsubscribeApproval = null; }
+  if (unsubscribeUnlock) { unsubscribeUnlock(); unsubscribeUnlock = null; }
+  isApproved = false;
+  quotaLoaded = false;
+  emailVerified = false;
+  myUnlockRequest = null;
+  E.$('#quota-banner').hidden = true;
+}
+
 /* ------------------------------------------------------------ Formulaire */
 // La 1re photo de photoItems sert de couverture (carte de la liste). Un clic
 // sur l'etoile d'une autre photo la fait passer en tete. Delegation sur le
@@ -753,7 +910,13 @@ E.$('#photo-gallery').addEventListener('click', function (e) {
   }
 });
 
+// Renvoie false (et ouvre l'ecran de deblocage) si un compte non debloque a
+// atteint sa limite de recettes.
 function openForm(recipe, returnScreen) {
+  if (!recipe && !newRecipeSlot().allowed) {
+    openUnlockScreen(returnScreen, 'Tu as atteint la limite de ' + FREE_MAX_RECIPES + ' recettes.');
+    return false;
+  }
   editingRecipe = recipe || null;
   formReturnScreen = returnScreen || 'screen-home';
   removedPhotos = [];
@@ -779,10 +942,15 @@ function openForm(recipe, returnScreen) {
 
   hideError('#form-error');
   E.screens.show('screen-form', { push: true });
+  return true;
 }
 
 E.$('#field-photo').addEventListener('change', function (e) {
   var files = Array.prototype.slice.call(e.target.files || []);
+  if (!isUnlocked() && photoItems.length + files.length > FREE_MAX_PHOTOS) {
+    files = files.slice(0, Math.max(0, FREE_MAX_PHOTOS - photoItems.length));
+    showError('#form-error', FREE_MAX_PHOTOS + ' photos maximum par recette tant que ton compte n’est pas débloqué.');
+  }
   files.forEach(function (f) { photoItems.push({ file: f }); });
   e.target.value = ''; // permet de re-choisir le meme fichier plus tard
   renderPhotoGallery();
@@ -821,10 +989,13 @@ E.$('#recipe-form').addEventListener('submit', function (e) {
     steps: steps,
   };
 
+  var slot = editingRecipe ? { allowed: true, id: null } : newRecipeSlot();
+  if (!slot.allowed) return openUnlockScreen('screen-home', 'Tu as atteint la limite de ' + FREE_MAX_RECIPES + ' recettes.');
+
   var submitBtn = E.$('#form-submit-btn');
   submitBtn.disabled = true;
 
-  saveRecipe(currentUser, editingRecipe ? editingRecipe.id : null, fields, photoItems, removedPhotos)
+  saveRecipe(currentUser, editingRecipe ? editingRecipe.id : null, fields, photoItems, removedPhotos, slot.id)
     .then(function (result) {
       submitBtn.disabled = false;
       if (result.photoError) {
@@ -922,10 +1093,13 @@ var adminUsageRequestId = 0;
 function updateAdminUsage() {
   var requestId = ++adminUsageRequestId;
   var usageEl = E.$('#admin-usage');
-  var photos = [];
-  allRecipes.forEach(function (r) { recipePhotos(r).forEach(function (p) { photos.push(p); }); });
+  var items = [];
+  allRecipes.forEach(function (r) {
+    recipePhotos(r).forEach(function (p) { items.push({ owner: r.ownerId, photo: p }); });
+  });
 
-  var sizes = photos.map(function (p) {
+  var sizes = items.map(function (it) {
+    var p = it.photo;
     if (p.sizeBytes) return Promise.resolve(p.sizeBytes);
     if (!p.path) return Promise.resolve(0);
     if (p.path in legacyPhotoSizeCache) return Promise.resolve(legacyPhotoSizeCache[p.path]);
@@ -937,16 +1111,157 @@ function updateAdminUsage() {
 
   Promise.all(sizes).then(function (values) {
     if (requestId !== adminUsageRequestId) return; // une vue plus recente a deja pris le relais
-    var totalBytes = values.reduce(function (a, b) { return a + b; }, 0);
+    var totalBytes = 0;
+    adminOwnerBytes = {};
+    values.forEach(function (bytes, i) {
+      var owner = items[i].owner;
+      adminOwnerBytes[owner] = (adminOwnerBytes[owner] || 0) + bytes;
+      totalBytes += bytes;
+    });
     var mb = totalBytes / (1024 * 1024);
     usageEl.textContent = 'Espace photos utilisé (estimation) : ' + mb.toFixed(1)
       + ' Mo / 5000 Mo gratuits — ' + allRecipes.length + ' recette' + (allRecipes.length > 1 ? 's' : '')
       + ', tous comptes confondus.';
+    renderAdminUsers();
   });
 }
 
+// Vue "Utilisateurs" : annuaire `users` (e-mail, inscription, derniere
+// connexion) fusionne avec les recettes (comptes qui en ont mais qui n'ont
+// pas encore de fiche dans l'annuaire, p.ex. inscrits avant sa creation).
+// Les plus recemment inscrits en premier : c'est eux qu'on surveille.
+function formatDate(ms) {
+  return ms ? new Date(ms).toLocaleDateString('fr-FR') : '—';
+}
+
+function adminAction(promise, done) {
+  promise.then(function () { done(); renderAdminUsers(); }).catch(function (err) {
+    showVisibleError('Action admin échouée', err);
+  });
+}
+
+function adminButton(label, primary, onClick) {
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn ' + (primary ? 'btn--primary' : 'btn--ghost');
+  btn.textContent = label;
+  btn.addEventListener('click', onClick);
+  return btn;
+}
+
+function hasPendingRequest(uid) {
+  return !!adminRequests[uid] && adminRequests[uid].status !== 'refused';
+}
+
+function renderAdminUsers() {
+  var wrap = E.$('#admin-user-list');
+  var byUid = {};
+  adminUsers.forEach(function (u) { byUid[u.uid] = { uid: u.uid, email: u.email, createdAt: u.createdAt, lastLoginAt: u.lastLoginAt }; });
+  var stats = {};
+  allRecipes.forEach(function (r) {
+    var st = stats[r.ownerId] || (stats[r.ownerId] = { recipes: 0, photos: 0 });
+    st.recipes++;
+    st.photos += recipePhotos(r).length;
+    if (!byUid[r.ownerId]) byUid[r.ownerId] = { uid: r.ownerId, email: r.ownerEmail };
+  });
+
+  // Demandes en attente d'abord, puis inscriptions les plus recentes.
+  var users = Object.keys(byUid).map(function (k) { return byUid[k]; });
+  users.sort(function (a, b) {
+    return (hasPendingRequest(b.uid) - hasPendingRequest(a.uid)) || ((b.createdAt || 0) - (a.createdAt || 0));
+  });
+
+  wrap.textContent = '';
+  users.forEach(function (u) {
+    var st = stats[u.uid] || { recipes: 0, photos: 0 };
+    var isAdminUser = u.uid === ADMIN_UID;
+    var row = document.createElement('div');
+    row.className = 'user-row';
+
+    var email = document.createElement('div');
+    email.className = 'user-row-email';
+    email.textContent = u.email || u.uid;
+    row.appendChild(email);
+
+    var dates = document.createElement('div');
+    dates.className = 'user-row-dates';
+    dates.textContent = 'Inscrit le ' + formatDate(u.createdAt) + ' · dernière connexion ' + formatDate(u.lastLoginAt);
+    row.appendChild(dates);
+
+    var chips = [st.recipes + ' recette' + (st.recipes > 1 ? 's' : ''), st.photos + ' photo' + (st.photos > 1 ? 's' : '')];
+    if (adminOwnerBytes) chips.push(((adminOwnerBytes[u.uid] || 0) / (1024 * 1024)).toFixed(1) + ' Mo');
+    chips.unshift(isAdminUser ? 'Admin' : (adminApproved[u.uid] ? 'Débloqué' : 'Limité'));
+    var chipRow = document.createElement('div');
+    chipRow.className = 'chip-row';
+    renderChips(chipRow, chips);
+    row.appendChild(chipRow);
+
+    var req = adminRequests[u.uid];
+    if (req && !isAdminUser) {
+      var quote = document.createElement('p');
+      quote.className = 'user-row-request';
+      quote.textContent = (req.status === 'refused' ? '[Refusée] ' : '') + (req.message || '');
+      row.appendChild(quote);
+    }
+
+    if (!isAdminUser) {
+      var actions = document.createElement('div');
+      actions.className = 'user-row-actions';
+      if (adminApproved[u.uid]) {
+        actions.appendChild(adminButton('Re-limiter', false, function () {
+          adminAction(revokeUser(u.uid), function () { delete adminApproved[u.uid]; });
+        }));
+      } else {
+        actions.appendChild(adminButton('Débloquer', true, function () {
+          adminAction(approveUser(u.uid), function () { adminApproved[u.uid] = true; delete adminRequests[u.uid]; });
+        }));
+        if (hasPendingRequest(u.uid)) {
+          actions.appendChild(adminButton('Refuser', false, function () {
+            adminAction(rejectUnlockRequest(u.uid), function () { adminRequests[u.uid].status = 'refused'; });
+          }));
+        }
+      }
+      row.appendChild(actions);
+    }
+
+    wrap.appendChild(row);
+  });
+
+  var pending = Object.keys(adminRequests).filter(hasPendingRequest).length;
+  E.$('[data-admin-tab="users"]').textContent = 'Utilisateurs' + (pending ? ' (' + pending + ')' : '');
+}
+
+function showAdminTab(tab) {
+  var users = tab === 'users';
+  document.querySelectorAll('.admin-tab').forEach(function (btn) {
+    var active = btn.getAttribute('data-admin-tab') === tab;
+    btn.classList.toggle('is-active', active);
+    btn.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  E.$('#admin-recipes-filters').hidden = users;
+  E.$('#admin-recipe-list').hidden = users;
+  E.$('#admin-user-list').hidden = !users;
+  if (users) E.$('#admin-empty-state').hidden = true;
+  else renderAdminList();
+}
+
+document.querySelectorAll('.admin-tab').forEach(function (btn) {
+  btn.addEventListener('click', function () { showAdminTab(btn.getAttribute('data-admin-tab')); });
+});
+
 E.$('#admin-btn').addEventListener('click', function () {
   E.$('#admin-search-input').value = '';
+  showAdminTab('recipes');
+  Promise.all([fetchAllUsers(), fetchQuotaState()]).then(function (res) {
+    adminUsers = res[0];
+    adminApproved = {};
+    res[1].approved.forEach(function (uid) { adminApproved[uid] = true; });
+    adminRequests = {};
+    res[1].requests.forEach(function (r) { adminRequests[r.uid] = r; });
+    renderAdminUsers();
+  }).catch(function (err) {
+    showVisibleError('Erreur de chargement des utilisateurs (admin)', err);
+  });
   unsubscribeAllRecipes = subscribeToAllRecipes(function (list) {
     allRecipes = list;
     buildCategoryOptions(E.$('#admin-category-filter'), allRecipes);
@@ -960,6 +1275,10 @@ E.$('#admin-btn').addEventListener('click', function () {
 E.$('#admin-back-btn').addEventListener('click', function () {
   if (unsubscribeAllRecipes) { unsubscribeAllRecipes(); unsubscribeAllRecipes = null; }
   allRecipes = [];
+  adminUsers = [];
+  adminApproved = {};
+  adminRequests = {};
+  adminOwnerBytes = null;
   E.screens.show('screen-home', { push: true });
 });
 
@@ -1127,23 +1446,39 @@ watchAuth(function (user) {
   if (user) {
     currentUser = user.uid;
     currentUserEmail = user.email || '';
+    emailVerified = user.emailVerified;
+    // Verifie peut-etre depuis un autre appareil : relit le compte (et le
+    // jeton lu par les regles) sans bloquer la connexion.
+    if (!emailVerified) {
+      refreshEmailVerified().then(function (verified) {
+        if (currentUser !== user.uid) return;
+        emailVerified = verified;
+        updateQuotaBanner();
+      }).catch(function () {});
+    }
     E.$('#admin-btn').hidden = currentUser !== ADMIN_UID;
     // Alimente l'annuaire uid -> e-mail (necessaire pour partager par
     // e-mail) ; best-effort, ne doit pas bloquer la connexion si ca echoue.
-    upsertUserProfile(currentUser, currentUserEmail).catch(function () {});
+    upsertUserProfile(currentUser, currentUserEmail, user.metadata).catch(function () {});
     // L'ecran d'accueil s'affiche dans tous les cas : une erreur Firestore
     // (ex. conflit de persistence locale, gere dans startRecipesSubscription)
     // ne doit jamais bloquer la transition post-connexion.
     E.screens.show('screen-home', { push: false });
     startRecipesSubscription(currentUser);
     startSharedSubscription(currentUser);
+    startQuotaSubscriptions(currentUser);
   } else {
     currentUser = null;
     currentUserEmail = '';
     stopRecipesSubscription();
     stopSharedSubscription();
+    stopQuotaSubscriptions();
     if (unsubscribeAllRecipes) { unsubscribeAllRecipes(); unsubscribeAllRecipes = null; }
     allRecipes = [];
+    adminUsers = [];
+    adminApproved = {};
+    adminRequests = {};
+    adminOwnerBytes = null;
     E.$('#auth-form').reset();
     setAuthMode('signin');
     E.screens.show('screen-auth', { push: false });

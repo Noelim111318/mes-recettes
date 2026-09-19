@@ -9,6 +9,10 @@
  * (Paramètres du projet > Général > Vos applications > icône Web > objet de
  * config affiché). Colle l'objet tel quel à la place de celui-ci.
  */
+// Cle de site reCAPTCHA v3 pour App Check (publique, pas un secret). Vide =
+// App Check desactive. Voir README > App Check pour l'obtenir.
+export const APP_CHECK_SITE_KEY = '';
+
 export const firebaseConfig = {
   apiKey: 'AIzaSyDewBKNIa4Avvb1SCS52OCMrOafOvAQ8J0',
   authDomain: 'mes-recettes-aea4e.firebaseapp.com',

@@ -23,6 +23,34 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == 'EwBMsqx4MGXHNHcPlkpb7StazJp2';
     }
 
+    // Compte "debloque" par l'admin : existence de quotas/{uid} (ecrit par
+    // l'admin seul). Les autres comptes sont limites (voir plus bas) pour
+    // eviter les abus : 2 recettes et 3 photos par recette.
+    function isApproved() {
+      return isAdmin()
+        || (request.auth != null && exists(/databases/$(database)/documents/quotas/$(request.auth.uid)));
+    }
+    // E-mail confirme (jeton Firebase Auth ; les comptes Google le sont d'office).
+    function isVerified() {
+      return request.auth.token.email_verified == true;
+    }
+    // Pas de compteur possible dans les regles : les 2 recettes d'un compte
+    // limite sont deux "emplacements" a l'id impose ({uid}_1, {uid}_2). Un id
+    // ne peut exister qu'une fois, donc pas plus de 2 creations simultanees ;
+    // supprimer une recette libere son emplacement.
+    function isFreeSlot(recipeId) {
+      return recipeId == request.auth.uid + '_1' || recipeId == request.auth.uid + '_2';
+    }
+    // Compte limite : 3 photos max par recette (une recette ayant deja plus de
+    // 3 photos avant l'introduction du quota reste modifiable, sans en ajouter).
+    function photosOnCreateOk() {
+      return request.resource.data.get('photos', []).size() <= 3;
+    }
+    function photosOnUpdateOk() {
+      return request.resource.data.get('photos', []).size() <= 3
+        || request.resource.data.get('photos', []).size() <= resource.data.get('photos', []).size();
+    }
+
     function onlyChangedKey(key) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly([key]);
     }
@@ -62,9 +90,11 @@ service cloud.firestore {
         && request.resource.data.favoritedBy is list
         && request.resource.data.favoritedBy.size() == 0
         && request.resource.data.title is string
-        && request.resource.data.title.size() > 0;
+        && request.resource.data.title.size() > 0
+        && (isApproved() || (isVerified() && isFreeSlot(recipeId) && photosOnCreateOk()));
 
-      allow update: if (isOwner(resource.data) && request.resource.data.ownerId == resource.data.ownerId)
+      allow update: if (isOwner(resource.data) && request.resource.data.ownerId == resource.data.ownerId
+          && (isApproved() || photosOnUpdateOk()))
         || (isSharedWithMe(resource.data) && (canToggleOwnFavorite() || canLeaveShared()));
 
       allow delete: if isOwner(resource.data);
@@ -79,6 +109,27 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if request.auth != null;
       allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Deblocage de compte : quotas/{uid} existe = compte debloque. Ecriture
+    // reservee a l'admin (surtout pas dans users/{uid}, que chacune peut
+    // modifier) ; la personne concernee peut seulement le lire.
+    match /quotas/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // Demande de deblocage (une seule par compte, remplacable) : e-mail +
+    // motivation. L'admin la lit, puis debloque ou refuse (status: 'refused').
+    match /unlockRequests/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow create, update: if isAdmin()
+        || (request.auth != null && request.auth.uid == uid && isVerified()
+          && request.resource.data.keys().hasOnly(['email', 'message', 'createdAt'])
+          && request.resource.data.message is string
+          && request.resource.data.message.size() > 0
+          && request.resource.data.message.size() <= 500);
+      allow delete: if isAdmin();
     }
   }
 }
