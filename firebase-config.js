@@ -11,7 +11,7 @@
  */
 // Cle de site reCAPTCHA v3 pour App Check (publique, pas un secret). Vide =
 // App Check desactive. Voir README > App Check pour l'obtenir.
-export const APP_CHECK_SITE_KEY = '';
+export const APP_CHECK_SITE_KEY = '6LcePsQtAAAAAN3Hs8VwO9WumLzJ5-SlfbM2Kovb';
 
 export const firebaseConfig = {
   apiKey: 'AIzaSyDewBKNIa4Avvb1SCS52OCMrOafOvAQ8J0',

@@ -104,7 +104,7 @@ qui appelle l'API directement (reCAPTCHA v3, gratuit). Désactivé tant que
    + `localhost` → copier la *clé du site* et la *clé secrète*.
 2. Console Firebase → App Check → Applications → app Web → fournisseur
    reCAPTCHA v3 → coller la clé secrète.
-3. Coller la clé du site dans `APP_CHECK_SITE_KEY`, déployer.
+3. Coller la clé du site dans `APP_CHECK_SITE_KEY` (déjà fait ; la clé secrète reste dans `cle_secrete`, ignoré par git), déployer.
 4. Laisser tourner quelques jours : App Check → Firestore / Storage affichent
    la part de requêtes « vérifiées ». Puis **Appliquer** (enforcement) sur
    Firestore et Storage. Pas sur Auth (exige Identity Platform, payant) :
